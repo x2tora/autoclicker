@@ -46,10 +46,10 @@
 ### 1. 설치
 
 1. 상단의 **Download for Android** 버튼 또는 [최신 릴리즈](https://github.com/x2tora/autoclicker/releases/latest)에서 내 기기에 맞는 APK 파일을 내려받아 실행합니다.
-   - **`autoclicker-v1.0.4-arm64-v8a.apk`** *(대부분의 최신 안드로이드 스마트폰 — 추천)*
-   - `autoclicker-v1.0.4-armeabi-v7a.apk` *(구형 32비트 기기)*
-   - `autoclicker-v1.0.4-x86.apk` / `autoclicker-v1.0.4-x86_64.apk` *(일부 태블릿·크롬북·에뮬레이터)*
-   - `autoclicker-v1.0.4-universal.apk` *(모든 기기 호환 통합본)*
+   - **`autoclicker-v1.0.5-arm64-v8a.apk`** *(대부분의 최신 안드로이드 스마트폰 — 추천)*
+   - `autoclicker-v1.0.5-armeabi-v7a.apk` *(구형 32비트 기기)*
+   - `autoclicker-v1.0.5-x86.apk` / `autoclicker-v1.0.5-x86_64.apk` *(일부 태블릿·크롬북·에뮬레이터)*
+   - `autoclicker-v1.0.5-universal.apk` *(모든 기기 호환 통합본)*
 2. 설치 중 **"출처를 알 수 없는 앱 설치 허용"** 안내가 표시되면 허용을 눌러 설치를 완료합니다.
 
 ### 2. 접근성 권한 허용 및 실행

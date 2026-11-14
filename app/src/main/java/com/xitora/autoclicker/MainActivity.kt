@@ -3,6 +3,8 @@ package com.xitora.autoclicker
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.activity.ComponentActivity
@@ -26,13 +28,20 @@ import com.xitora.autoclicker.viewmodel.AutoClickerViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
+        var keepSplashOnScreen = savedInstanceState == null
+        splashScreen.setKeepOnScreenCondition { keepSplashOnScreen }
+        if (keepSplashOnScreen) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                keepSplashOnScreen = false
+            }, 750L)
+        }
         splashScreen.setOnExitAnimationListener { splashProvider ->
             val fadeOut = ObjectAnimator.ofFloat(splashProvider.view, View.ALPHA, 1f, 0f)
             val scaleX = ObjectAnimator.ofFloat(splashProvider.view, View.SCALE_X, 1f, 1.04f)
             val scaleY = ObjectAnimator.ofFloat(splashProvider.view, View.SCALE_Y, 1f, 1.04f)
             AnimatorSet().apply {
                 playTogether(fadeOut, scaleX, scaleY)
-                duration = 260L
+                duration = 320L
                 interpolator = AccelerateDecelerateInterpolator()
                 doOnEnd { splashProvider.remove() }
                 start()
