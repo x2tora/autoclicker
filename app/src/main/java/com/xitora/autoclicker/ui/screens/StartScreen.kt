@@ -146,7 +146,6 @@ fun StartScreen(
             }
         }
 
-        // Quick-launch dual cards: Single & Multi directly from the start screen
         item {
             SmallTitle(text = "바로 실행")
             Row(
@@ -227,7 +226,6 @@ fun StartScreen(
             }
         }
 
-        // Inline section switcher (no bottom navigation bar)
         item {
             TabRowWithContour(
                 tabs = listOf("단일 설정", "다중 설정", "프리셋", "터치 테스트"),

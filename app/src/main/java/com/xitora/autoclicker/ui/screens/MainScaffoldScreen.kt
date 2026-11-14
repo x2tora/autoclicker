@@ -227,7 +227,7 @@ private fun MainTabsHost(
                 }
             }
 
-            // ② Floating overlay layer (strictly OUTSIDE layerBackdrop capture box)
+            // Keep floating overlays outside layerBackdrop to avoid cyclic RenderNode graphs.
             StackedToastHost(
                 state = toastState,
                 modifier = Modifier
