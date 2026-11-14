@@ -87,6 +87,16 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
         AutoClickAccessibilityService.instance?.hideOverlay()
     }
 
+    fun toggleOverlayClicking(): Boolean {
+        val service = AutoClickAccessibilityService.instance
+        if (service == null) {
+            stateHolder.refreshAccessibilityStatus()
+            return false
+        }
+        service.toggleClicking()
+        return true
+    }
+
     fun updateSingleConfig(config: ClickTimingConfig) = stateHolder.updateSingleConfig(config)
 
     fun updateMultiConfig(config: ClickTimingConfig, syncToTargets: Boolean = true) =
@@ -112,6 +122,9 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun updateThemeColorStyle(style: ThemeColorStyle) =
         stateHolder.updateSettings { it.copy(themeColorStyle = style) }
+
+    fun updateNavBarStyle(style: NavBarStyle) =
+        stateHolder.updateSettings { it.copy(navBarStyle = style) }
 
     fun updateCustomKeyColor(colorHex: Long?) =
         stateHolder.updateSettings {

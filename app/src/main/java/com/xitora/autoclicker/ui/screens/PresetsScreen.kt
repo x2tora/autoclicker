@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.AutoClickerDataState
@@ -31,6 +32,7 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 fun PresetsScreen(
     state: AutoClickerDataState,
     scrollBehavior: ScrollBehavior,
+    bottomBarExtraPadding: Dp,
     onApplyPreset: (ClickPreset, Boolean) -> Unit,
     onRenamePreset: (String, String) -> Unit,
     onDeletePreset: (String) -> Unit,
@@ -45,7 +47,12 @@ fun PresetsScreen(
             .fillMaxSize()
             .overScrollVertical()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 112.dp + navBottomInset),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 8.dp,
+            bottom = bottomBarExtraPadding + navBottomInset
+        ),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
@@ -94,7 +101,9 @@ fun PresetsScreen(
                 val isMulti = preset.mode == ClickMode.MULTI
                 val accent = if (isMulti) Color(0xFF2B8A3E) else MiuixTheme.colorScheme.primary
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateItem(),
                     cornerRadius = 18.dp,
                     insideMargin = PaddingValues(16.dp)
                 ) {

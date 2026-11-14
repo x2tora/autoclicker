@@ -1,5 +1,11 @@
 package com.xitora.autoclicker.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,32 +55,20 @@ fun MiuixGlassIcon(
     modifier: Modifier = Modifier,
     size: Dp = 40.dp,
     iconSize: Dp = 20.dp,
-    cornerRadius: Dp = 12.dp
+    @Suppress("UNUSED_PARAMETER") cornerRadius: Dp = 12.dp
 ) {
-    val isDark = LocalIsDarkTheme.current
-    val containerTint = if (isDark) {
-        Color.White.copy(alpha = 0.08f)
-    } else {
-        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.05f)
-    }
-    val borderTint = if (isDark) {
-        Color.White.copy(alpha = 0.12f)
-    } else {
-        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.09f)
-    }
+    val resolvedIconSize = maxOf(iconSize * 1.42f, (size.value * 0.72f).dp)
+    val containerSize = maxOf(resolvedIconSize, (size.value * 0.80f).dp)
 
     Box(
-        modifier = modifier
-            .size(size)
-            .squircleBackground(containerTint, cornerRadius)
-            .squircleBorder(1.dp, borderTint, cornerRadius),
+        modifier = modifier.size(containerSize),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = accentColor,
-            modifier = Modifier.size(iconSize)
+            modifier = Modifier.size(resolvedIconSize)
         )
     }
 }
@@ -301,7 +295,9 @@ fun ClickTimingEditorSection(
         if (showRepeatSection) {
             SmallTitle(text = "반복 종료 조건")
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(),
                 cornerRadius = 20.dp,
                 insideMargin = PaddingValues(16.dp)
             ) {
@@ -388,7 +384,9 @@ fun ClickTimingEditorSection(
 
         SmallTitle(text = "봇 방지 랜덤 터치")
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize(),
             cornerRadius = 20.dp
         ) {
             SwitchPreference(
@@ -398,6 +396,7 @@ fun ClickTimingEditorSection(
                 onCheckedChange = { enabled ->
                     onConfigChange(config.copy(antiBotRandomEnabled = enabled))
                 },
+                insideMargin = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
                 startAction = {
                     MiuixGlassIcon(
                         icon = MiuixIcons.Stopwatch,
@@ -406,64 +405,70 @@ fun ClickTimingEditorSection(
                     )
                 }
             )
-            if (config.antiBotRandomEnabled) {
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "선택 랜덤 영역 반경",
-                            style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
-                            color = MiuixTheme.colorScheme.onSurface
-                        )
-                        SquirclePillBadge(
-                            text = "반경 ${config.randomRadiusDp}dp",
-                            backgroundColor = Color(0xFF06B6D4).copy(alpha = 0.15f),
-                            contentColor = Color(0xFF0891B2)
-                        )
-                    }
-                    Slider(
-                        value = config.randomRadiusDp.toFloat(),
-                        onValueChange = { raw ->
-                            onConfigChange(config.copy(randomRadiusDp = raw.roundToInt().coerceIn(8, 80)))
-                        },
-                        valueRange = 8f..80f,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+            AnimatedVisibility(
+                visible = config.antiBotRandomEnabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(176.dp)
-                                .squircleBackground(MiuixTheme.colorScheme.surfaceContainerHigh, 16.dp),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TargetPreviewBadge(
-                                order = 1,
-                                antiBotEnabled = true,
-                                radiusDp = config.randomRadiusDp,
-                                reticleSizeDp = reticleSizeDp,
-                                exactScale = true,
-                                modifier = Modifier.size(172.dp)
+                            Text(
+                                text = "선택 랜덤 영역 반경",
+                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                            SquirclePillBadge(
+                                text = "반경 ${config.randomRadiusDp}dp",
+                                backgroundColor = Color(0xFF06B6D4).copy(alpha = 0.15f),
+                                contentColor = Color(0xFF0891B2)
                             )
                         }
-                        Text(
-                            text = "실제 화면과 동일한 1:1 비율입니다. 파란 점선 원 내부 어느 위치든 무작위로 터치됩니다.",
-                            style = MiuixTheme.textStyles.footnote2,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        Slider(
+                            value = config.randomRadiusDp.toFloat(),
+                            onValueChange = { raw ->
+                                onConfigChange(config.copy(randomRadiusDp = raw.roundToInt().coerceIn(8, 80)))
+                            },
+                            valueRange = 8f..80f,
+                            modifier = Modifier.fillMaxWidth()
                         )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(176.dp)
+                                    .squircleBackground(MiuixTheme.colorScheme.surfaceContainerHigh, 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                TargetPreviewBadge(
+                                    order = 1,
+                                    antiBotEnabled = true,
+                                    radiusDp = config.randomRadiusDp,
+                                    reticleSizeDp = reticleSizeDp,
+                                    exactScale = true,
+                                    modifier = Modifier.size(172.dp)
+                                )
+                            }
+                            Text(
+                                text = "실제 화면과 동일한 1:1 비율입니다. 파란 점선 원 내부 어느 위치든 무작위로 터치됩니다.",
+                                style = MiuixTheme.textStyles.footnote2,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
                     }
                 }
             }
@@ -726,7 +731,11 @@ fun TargetPointEditDialog(
                     onCheckedChange = { editing = editing.copy(antiBotRandomEnabled = it) }
                 )
             }
-            if (editing.antiBotRandomEnabled) {
+            AnimatedVisibility(
+                visible = editing.antiBotRandomEnabled,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
                 Slider(
                     value = editing.randomRadiusDp.toFloat(),
                     onValueChange = { editing = editing.copy(randomRadiusDp = it.roundToInt().coerceIn(8, 80)) },

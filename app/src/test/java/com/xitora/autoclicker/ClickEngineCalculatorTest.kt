@@ -117,12 +117,22 @@ class ClickEngineCalculatorTest {
             settings = AppSettings(
                 themeOption = ThemeOption.DARK,
                 themeColorStyle = ThemeColorStyle.CUSTOM,
-                customKeyColorHex = 0xFF10B981
+                customKeyColorHex = 0xFF10B981,
+                navBarStyle = NavBarStyle.LIQUID_GLASS
             )
         )
         val encoded = json.encodeToString(AutoClickerDataState.serializer(), original)
         val decoded = json.decodeFromString(AutoClickerDataState.serializer(), encoded)
         assertEquals(original, decoded)
+        assertEquals(NavBarStyle.LIQUID_GLASS, decoded.settings.resolvedNavBarStyle())
+    }
+
+    @Test
+    fun `legacy json without navBarStyle decodes cleanly to MIUIX default`() {
+        val json = Json { ignoreUnknownKeys = true }
+        val legacyJson = """{"themeOption":"SYSTEM","themeColorStyle":"DEFAULT"}"""
+        val decoded = json.decodeFromString(AppSettings.serializer(), legacyJson)
+        assertEquals(NavBarStyle.MIUIX, decoded.resolvedNavBarStyle())
     }
 
     @Test

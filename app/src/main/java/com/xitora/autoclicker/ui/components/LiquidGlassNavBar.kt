@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +67,10 @@ import kotlinx.coroutines.launch
 import org.intellij.lang.annotations.Language
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.NavigationBar
+import top.yukonga.miuix.kmp.basic.NavigationBarDefaults
+import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
+import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.BackdropEffectScope
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -77,13 +82,11 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Favorites
-import top.yukonga.miuix.kmp.icon.extended.Layers
-import top.yukonga.miuix.kmp.icon.extended.Location
-import top.yukonga.miuix.kmp.icon.extended.Play
+import top.yukonga.miuix.kmp.icon.extended.Help
+import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.shader.asAndroidRuntimeShader
 import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.squircle.squircleBackground
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -97,7 +100,8 @@ private val DockRefractionHeight = 14.dp
 private val DockRefractionAmount = 10.dp
 private val DockChromaticAberration = 2.2.dp
 
-private val GlassSurfaceTint = Color(0xFF6E7D96).copy(alpha = 0.03f)
+private val DarkFrostedScrim = Color(0xFF141821).copy(alpha = 0.74f)
+private val LightFrostedScrim = Color.White.copy(alpha = 0.78f)
 private const val GlassGrainAlpha = 0.10f
 private const val GRAIN_TILE = 96
 
@@ -219,29 +223,31 @@ fun Modifier.liquidGlassSurface(
     refractionAmount: Dp = DockRefractionAmount,
     chromaticAberration: Dp = DockChromaticAberration,
     refraction: Boolean = true,
-    surfaceTint: Color = GlassSurfaceTint,
+    surfaceTint: Color? = null,
     grainAlpha: Float = GlassGrainAlpha,
-    fallbackColor: Color = MiuixTheme.colorScheme.surfaceContainer
+    fallbackColor: Color? = null
 ): Modifier {
     val isDark = LocalIsDarkTheme.current
+    val resolvedScrim = surfaceTint ?: if (isDark) DarkFrostedScrim else LightFrostedScrim
+    val resolvedFallback = fallbackColor ?: if (isDark) {
+        Color(0xFF141821).copy(alpha = 0.92f)
+    } else {
+        Color.White.copy(alpha = 0.94f)
+    }
+
     if (backdrop == null || !isRuntimeShaderSupported() || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        return this.clip(shape).background(fallbackColor.copy(alpha = 0.94f))
+        return this.clip(shape).background(resolvedFallback)
     }
 
     val grainBrush = rememberGrainBrush()
     val highlight = if (isDark) Highlight.GlassStrokeMiddleDark else Highlight.GlassStrokeMiddleLight
-    val extraSurfaceTint = if (isDark) {
-        Color.White.copy(alpha = 0.045f)
-    } else {
-        surfaceTint
-    }
 
     return this.drawBackdrop(
         backdrop = backdrop,
         shape = { shape },
         highlight = { highlight },
         onDrawSurface = {
-            if (extraSurfaceTint.alpha > 0f) drawRect(color = extraSurfaceTint)
+            if (resolvedScrim.alpha > 0f) drawRect(color = resolvedScrim)
             if (grainAlpha > 0f) drawRect(brush = grainBrush, alpha = grainAlpha)
         },
         effects = {
@@ -260,14 +266,33 @@ fun Modifier.liquidGlassSurface(
 
 private data class NavSlot(
     val slotIndex: Int,
-    val tabIndex: Int?, // null for the centered emphasized '+' action
+    val tabIndex: Int?, // null for the centered '+' action
     val icon: ImageVector,
     val label: String
 )
 
-private fun tabToSlot(tabIndex: Int): Int = tabIndex.coerceIn(0, 2)
+private val DockSlots = listOf(
+    NavSlot(0, 0, MiuixIcons.Home, "홈"),
+    NavSlot(1, 1, MiuixIcons.Favorites, "프리셋"),
+    NavSlot(2, null, MiuixIcons.Add, "실행"),
+    NavSlot(3, 2, MiuixIcons.Tune, "테스트"),
+    NavSlot(4, 3, MiuixIcons.Help, "가이드")
+)
 
-private fun slotToTab(slotIndex: Int): Int = slotIndex.coerceIn(0, 2)
+private fun tabToSlot(tabIndex: Int): Int = when (tabIndex.coerceIn(0, 3)) {
+    0 -> 0
+    1 -> 1
+    2 -> 3
+    else -> 4
+}
+
+private fun slotToTab(slotIndex: Int): Int? = when (slotIndex.coerceIn(0, 4)) {
+    0 -> 0
+    1 -> 1
+    3 -> 2
+    4 -> 3
+    else -> null
+}
 
 private fun nearestAllSlot(
     leftPx: Float,
@@ -276,7 +301,7 @@ private fun nearestAllSlot(
 ): Int {
     if (itemWidthPx <= 0f) return 0
     val approxSlot = ((leftPx - insetPx) / itemWidthPx).roundToInt()
-    return approxSlot.coerceIn(0, 2)
+    return approxSlot.coerceIn(0, DockSlots.lastIndex)
 }
 
 private fun stretchOf(leftPx: Float, anchorPx: Float, itemWidthPx: Float): Float {
@@ -286,11 +311,125 @@ private fun stretchOf(leftPx: Float, anchorPx: Float, itemWidthPx: Float): Float
 }
 
 @Composable
+fun StandardMiuixNavBar(
+    selectedTab: Int,
+    presetCount: Int,
+    showAccessibilityDot: Boolean,
+    isCenterAddSelected: Boolean,
+    onSelectTab: (Int) -> Unit,
+    onToggleCenterAdd: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    NavigationBar(
+        modifier = modifier,
+        showDivider = true,
+        defaultWindowInsetsPadding = true,
+        mode = NavigationBarDisplayMode.IconAndText
+    ) {
+        NavigationBarItem(
+            selected = !isCenterAddSelected && selectedTab == 0,
+            onClick = { onSelectTab(0) },
+            icon = MiuixIcons.Home,
+            label = "홈"
+        )
+        NavigationBarItem(
+            selected = !isCenterAddSelected && selectedTab == 1,
+            onClick = { onSelectTab(1) },
+            icon = MiuixIcons.Favorites,
+            label = "프리셋",
+            badge = if (presetCount > 0) {
+                {
+                    Box(modifier = Modifier.offset(x = 6.dp, y = (-3).dp)) {
+                        Badge { Text(presetCount.toString()) }
+                    }
+                }
+            } else {
+                null
+            }
+        )
+
+        // Centered '+' action matching NavigationBarDefaults metrics for exact baseline alignment.
+        val addInteraction = remember { MutableInteractionSource() }
+        val addPressed by addInteraction.collectIsPressedAsState()
+        val addRotation by animateFloatAsState(
+            targetValue = if (isCenterAddSelected) 45f else 0f,
+            animationSpec = spring(dampingRatio = 0.74f, stiffness = 420f),
+            label = "miuixCenterAddRot"
+        )
+        val addAlpha = when {
+            isCenterAddSelected && addPressed -> NavigationBarDefaults.SelectedPressedAlpha
+            isCenterAddSelected -> 1f
+            addPressed -> NavigationBarDefaults.UnselectedPressedAlpha
+            else -> NavigationBarDefaults.UnselectedAlpha
+        }
+        val addTint = MiuixTheme.colorScheme.onSurface.copy(alpha = addAlpha)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .height(NavigationBarDefaults.ItemHeight)
+                .clickable(
+                    interactionSource = addInteraction,
+                    indication = null,
+                    role = Role.Button,
+                    onClick = onToggleCenterAdd
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
+        ) {
+            Icon(
+                imageVector = MiuixIcons.Add,
+                contentDescription = "빠른 실행 메뉴",
+                tint = addTint,
+                modifier = Modifier
+                    .padding(top = NavigationBarDefaults.IconTopPadding)
+                    .size(NavigationBarDefaults.IconSize)
+                    .graphicsLayer { rotationZ = addRotation }
+            )
+            Text(
+                text = "실행",
+                color = addTint,
+                fontSize = NavigationBarDefaults.LabelFontSize,
+                fontWeight = if (isCenterAddSelected) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Visible,
+                modifier = Modifier.padding(bottom = NavigationBarDefaults.BottomPadding)
+            )
+        }
+
+        NavigationBarItem(
+            selected = !isCenterAddSelected && selectedTab == 2,
+            onClick = { onSelectTab(2) },
+            icon = MiuixIcons.Tune,
+            label = "테스트"
+        )
+        NavigationBarItem(
+            selected = !isCenterAddSelected && selectedTab == 3,
+            onClick = { onSelectTab(3) },
+            icon = MiuixIcons.Help,
+            label = "가이드",
+            badge = if (showAccessibilityDot) {
+                {
+                    Box(modifier = Modifier.offset(x = 6.dp, y = (-4).dp)) {
+                        Badge()
+                    }
+                }
+            } else {
+                null
+            }
+        )
+    }
+}
+
+@Composable
 fun FloatingLiquidGlassNavBar(
     backdrop: LayerBackdrop?,
     selectedTab: Int,
     presetCount: Int,
+    showAccessibilityDot: Boolean,
+    isCenterAddSelected: Boolean,
     onSelectTab: (Int) -> Unit,
+    onToggleCenterAdd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var barPressed by remember { mutableStateOf(false) }
@@ -303,17 +442,10 @@ fun FloatingLiquidGlassNavBar(
         label = "dockPressScale"
     )
 
-    val slots = remember {
-        listOf(
-            NavSlot(0, 0, MiuixIcons.Location, "홈"),
-            NavSlot(1, 1, MiuixIcons.Favorites, "프리셋"),
-            NavSlot(2, 2, MiuixIcons.Tune, "테스트")
-        )
-    }
-
     Box(
         modifier = modifier
-            .width(286.dp)
+            .widthIn(max = 384.dp)
+            .fillMaxWidth()
             .height(DockHeight)
             .graphicsLayer {
                 scaleX = barScale
@@ -321,10 +453,13 @@ fun FloatingLiquidGlassNavBar(
             }
     ) {
         LiquidGlassNavBarContent(
-            slots = slots,
+            slots = DockSlots,
             selectedTab = selectedTab,
             presetCount = presetCount,
+            showAccessibilityDot = showAccessibilityDot,
+            isCenterAddSelected = isCenterAddSelected,
             onSelectTab = onSelectTab,
+            onToggleCenterAdd = onToggleCenterAdd,
             pageBackdrop = backdrop,
             contentHeight = DockHeight,
             onBarPressedChange = { barPressed = it },
@@ -338,7 +473,10 @@ private fun LiquidGlassNavBarContent(
     slots: List<NavSlot>,
     selectedTab: Int,
     presetCount: Int,
+    showAccessibilityDot: Boolean,
+    isCenterAddSelected: Boolean,
     onSelectTab: (Int) -> Unit,
+    onToggleCenterAdd: () -> Unit,
     pageBackdrop: LayerBackdrop?,
     contentHeight: Dp,
     onBarPressedChange: (Boolean) -> Unit,
@@ -357,7 +495,7 @@ private fun LiquidGlassNavBarContent(
     val sliderWidthPx = (itemWidthPx - insetPx * 2f).coerceAtLeast(0f)
     val sliderHeightPx = with(density) { sliderHeight.toPx() }
 
-    val targetSlot = tabToSlot(selectedTab.coerceIn(0, 3))
+    val targetSlot = if (isCenterAddSelected) 2 else tabToSlot(selectedTab)
     val targetOffsetPx = itemWidthPx * targetSlot + insetPx
 
     val interactionSources = remember(slotCount) { List(slotCount) { MutableInteractionSource() } }
@@ -394,6 +532,12 @@ private fun LiquidGlassNavBarContent(
     var dragHighlightSlot by remember { mutableStateOf<Int?>(null) }
     val anchorSlot = dragHighlightSlot ?: targetSlot
     val anchorPx = itemWidthPx * anchorSlot + insetPx
+
+    val addRotation by animateFloatAsState(
+        targetValue = if (isCenterAddSelected) 45f else 0f,
+        animationSpec = spring(dampingRatio = 0.74f, stiffness = 420f),
+        label = "glassCenterAddRot"
+    )
 
     val pressProgress by animateFloatAsState(
         targetValue = if (pressed) 1f else 0f,
@@ -460,7 +604,12 @@ private fun LiquidGlassNavBarContent(
                                     insetPx = insetPx,
                                     itemWidthPx = itemWidthPx
                                 )
-                                onSelectTab(slotToTab(snapSlot))
+                                val resolvedTab = slotToTab(snapSlot)
+                                if (resolvedTab != null) {
+                                    onSelectTab(resolvedTab)
+                                } else {
+                                    onToggleCenterAdd()
+                                }
                             }
                             break
                         }
@@ -495,6 +644,7 @@ private fun LiquidGlassNavBarContent(
                 }
             }
     ) {
+        // Layer 1: Frosted backdrop + dock slots captured for Layer 2 lens refraction (badges excluded).
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -509,8 +659,7 @@ private fun LiquidGlassNavBarContent(
                         blurRadius = DockBlurRadius,
                         refractionHeight = DockRefractionHeight,
                         refractionAmount = DockRefractionAmount,
-                        refraction = true,
-                        fallbackColor = MiuixTheme.colorScheme.surfaceContainer
+                        refraction = true
                     )
             )
 
@@ -522,8 +671,8 @@ private fun LiquidGlassNavBarContent(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 slots.forEachIndexed { slotIdx, slot ->
-                    val tabIdx = slot.tabIndex ?: return@forEachIndexed
                     val selected = slotIdx == anchorSlot
+                    val isCenter = slot.tabIndex == null
                     val tint = if (selected) {
                         MiuixTheme.colorScheme.primary
                     } else {
@@ -536,25 +685,26 @@ private fun LiquidGlassNavBarContent(
                             .clickable(
                                 interactionSource = interactionSources[slotIdx],
                                 indication = null,
-                                role = Role.Tab,
-                                onClick = { onSelectTab(tabIdx) }
+                                role = if (isCenter) Role.Button else Role.Tab,
+                                onClick = {
+                                    val tab = slot.tabIndex
+                                    if (tab != null) onSelectTab(tab) else onToggleCenterAdd()
+                                }
                             ),
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(contentAlignment = Alignment.TopEnd) {
-                            Icon(
-                                imageVector = slot.icon,
-                                contentDescription = slot.label,
-                                modifier = Modifier.size(22.dp),
-                                tint = tint
-                            )
-                            if (tabIdx == 1 && presetCount > 0) {
-                                Box(modifier = Modifier.offset(x = 9.dp, y = (-5).dp)) {
-                                    Badge { Text(presetCount.toString()) }
-                                }
-                            }
-                        }
+                        Icon(
+                            imageVector = slot.icon,
+                            contentDescription = slot.label,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .then(
+                                    if (isCenter) Modifier.graphicsLayer { rotationZ = addRotation }
+                                    else Modifier
+                                ),
+                            tint = tint
+                        )
                         Text(
                             text = slot.label,
                             color = tint,
@@ -569,6 +719,7 @@ private fun LiquidGlassNavBarContent(
             }
         }
 
+        // Layer 2: AGSL sliding liquid-glass lens indicator across all 5 slots.
         if (sliderWidthPx > 0f && sliderHeightPx > 0f) {
             Box(
                 modifier = Modifier
@@ -602,6 +753,43 @@ private fun LiquidGlassNavBarContent(
                         fallbackColor = MiuixTheme.colorScheme.primary.copy(alpha = if (isDark) 0.22f else 0.16f)
                     )
             )
+        }
+
+        // Layer 3: Unrefracted badge overlay rendered above the refractive shader layer.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(contentHeight),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            slots.forEach { slot ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(modifier = Modifier.size(22.dp), contentAlignment = Alignment.TopEnd) {
+                        when (slot.tabIndex) {
+                            1 -> if (presetCount > 0) {
+                                Box(modifier = Modifier.offset(x = 8.dp, y = (-4).dp)) {
+                                    Badge { Text(presetCount.toString()) }
+                                }
+                            }
+                            3 -> if (showAccessibilityDot) {
+                                Box(modifier = Modifier.offset(x = 6.dp, y = (-4).dp)) {
+                                    Badge()
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        text = "",
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
         }
     }
 }

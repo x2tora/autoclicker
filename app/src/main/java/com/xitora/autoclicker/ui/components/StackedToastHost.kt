@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -50,6 +49,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.squircle.squircleBackground
+import top.yukonga.miuix.kmp.squircle.squircleBorder
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.abs
@@ -219,7 +219,7 @@ private fun SwipeableToastCard(
             )
             .squircleClip(corner)
             .squircleBackground(color = containerColor, cornerRadius = corner)
-            .border(width = 0.75.dp, color = borderColor, shape = RoundedCornerShape(corner))
+            .squircleBorder(width = 0.75.dp, color = borderColor, cornerRadius = corner)
             .then(
                 if (isFront && !isExiting) {
                     Modifier.pointerInput(Unit) {
@@ -274,23 +274,13 @@ private fun SwipeableToastCard(
             .heightIn(min = 24.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .squircleBackground(
-                    color = MiuixTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    cornerRadius = 8.dp
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = MiuixIcons.Ok,
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.primary,
-                modifier = Modifier.size(14.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(10.dp))
+        Icon(
+            imageVector = MiuixIcons.Ok,
+            contentDescription = null,
+            tint = MiuixTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = message,
             style = MiuixTheme.textStyles.body2,

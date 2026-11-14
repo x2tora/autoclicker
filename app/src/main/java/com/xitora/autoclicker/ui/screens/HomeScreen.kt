@@ -1,17 +1,29 @@
 package com.xitora.autoclicker.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.*
@@ -22,14 +34,17 @@ import com.xitora.autoclicker.ui.components.TargetPointEditDialog
 import com.xitora.autoclicker.ui.components.TargetPreviewBadge
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Edit
+import top.yukonga.miuix.kmp.icon.extended.Favorites
+import top.yukonga.miuix.kmp.icon.extended.Help
 import top.yukonga.miuix.kmp.icon.extended.Layers
 import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Play
+import top.yukonga.miuix.kmp.icon.extended.Playlist
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.squircle.squircleBackground
 import top.yukonga.miuix.kmp.squircle.squircleClip
@@ -39,10 +54,13 @@ import kotlin.math.roundToInt
 
 @Composable
 fun HomeScreen(
+    listState: LazyListState,
     state: AutoClickerDataState,
     runtime: OverlayRuntimeState,
     scrollBehavior: ScrollBehavior,
+    bottomBarExtraPadding: Dp,
     onLaunchMode: (ClickMode) -> Unit,
+    onToggleClicking: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenAppInfoSettings: () -> Unit,
     onUpdateSingleConfig: (ClickTimingConfig) -> Unit,
@@ -51,6 +69,7 @@ fun HomeScreen(
     onUpdateTarget: (TargetPoint) -> Unit,
     onDeleteTarget: (String) -> Unit,
     onSavePresetClick: (ClickMode) -> Unit,
+    onNavigateTab: (Int) -> Unit,
     onNotify: (String) -> Unit
 ) {
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -61,15 +80,34 @@ fun HomeScreen(
     val isMultiActive = runtime.isOverlayVisible && runtime.activeMode == ClickMode.MULTI
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .overScrollVertical()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 112.dp + navBottomInset),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 8.dp,
+            bottom = bottomBarExtraPadding + navBottomInset
+        ),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        if (!runtime.isAccessibilityEnabled) {
-            item {
+        item(key = "hero_status") {
+            ActiveSessionHeroCard(
+                state = state,
+                runtime = runtime,
+                onToggleClicking = onToggleClicking,
+                onCloseOverlay = { onLaunchMode(runtime.activeMode) }
+            )
+        }
+
+        item(key = "accessibility_banner") {
+            AnimatedVisibility(
+                visible = !runtime.isAccessibilityEnabled,
+                enter = expandVertically(animationSpec = tween(220)) + fadeIn(tween(220)),
+                exit = shrinkVertically(animationSpec = tween(180)) + fadeOut(tween(180))
+            ) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 18.dp,
@@ -81,7 +119,10 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
                                 Text(
                                     text = "접근성 서비스 권한이 필요합니다",
                                     style = MiuixTheme.textStyles.headline2.copy(fontWeight = FontWeight.SemiBold),
@@ -132,43 +173,7 @@ fun HomeScreen(
             }
         }
 
-        if (runtime.isOverlayVisible) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 18.dp,
-                    insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            val modeName = if (runtime.activeMode == ClickMode.SINGLE) "단일 타겟 모드" else "다중 타겟 모드"
-                            Text(
-                                text = "$modeName 오버레이 활성",
-                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
-                                color = MiuixTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "${if (runtime.isClicking) "자동 클릭 진행 중" else "대기 중"} · 누적 ${runtime.clickCount}회",
-                                style = MiuixTheme.textStyles.footnote2,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        }
-                        SquirclePillBadge(
-                            text = "오버레이 닫기",
-                            backgroundColor = Color(0xFFD93025).copy(alpha = 0.14f),
-                            contentColor = Color(0xFFD93025),
-                            onClick = { onLaunchMode(runtime.activeMode) }
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
+        item(key = "mode_launch_cards") {
             SmallTitle(text = "클릭 모드 바로 실행")
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 StackedModeLaunchCard(
@@ -198,6 +203,56 @@ fun HomeScreen(
                 )
             }
         }
+
+        item(key = "quick_actions_grid") {
+            SmallTitle(text = "빠른 도구")
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    QuickActionGridCard(
+                        icon = MiuixIcons.Favorites,
+                        accentColor = Color(0xFFF59E0B),
+                        title = "프리셋 저장",
+                        subtitle = if (isMultiActive) "다중 타겟 구성" else "단일 타겟 구성",
+                        onClick = {
+                            onSavePresetClick(if (isMultiActive) ClickMode.MULTI else ClickMode.SINGLE)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionGridCard(
+                        icon = MiuixIcons.Playlist,
+                        accentColor = MiuixTheme.colorScheme.primary,
+                        title = "프리셋 보관함",
+                        subtitle = "저장된 구성 ${state.presets.size}개",
+                        onClick = { onNavigateTab(1) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    QuickActionGridCard(
+                        icon = MiuixIcons.Tune,
+                        accentColor = Color(0xFF06B6D4),
+                        title = "터치 테스트",
+                        subtitle = "실제 CPS · 분산 측정",
+                        onClick = { onNavigateTab(2) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionGridCard(
+                        icon = MiuixIcons.Help,
+                        accentColor = Color(0xFF10B981),
+                        title = "권한 · 가이드",
+                        subtitle = "OneUI 제한 해제 안내",
+                        onClick = { onNavigateTab(3) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
     }
 
     settingsSheetMode?.let { mode ->
@@ -214,7 +269,7 @@ fun HomeScreen(
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 if (mode == ClickMode.SINGLE) {
-                    item {
+                    item(key = "single_target_info") {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             cornerRadius = 18.dp,
@@ -248,7 +303,7 @@ fun HomeScreen(
                             }
                         }
                     }
-                    item {
+                    item(key = "single_timing_editor") {
                         ClickTimingEditorSection(
                             config = state.singleConfig,
                             showRepeatSection = true,
@@ -257,7 +312,7 @@ fun HomeScreen(
                         )
                     }
                 } else {
-                    item {
+                    item(key = "multi_targets_header") {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -288,6 +343,7 @@ fun HomeScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .animateItem()
                                 .squircleClip(16.dp)
                                 .clickable { editingTarget = target },
                             cornerRadius = 16.dp,
@@ -348,7 +404,7 @@ fun HomeScreen(
                         }
                     }
 
-                    item {
+                    item(key = "multi_timing_editor") {
                         ClickTimingEditorSection(
                             config = state.multiConfig,
                             showRepeatSection = true,
@@ -380,6 +436,258 @@ fun HomeScreen(
 }
 
 @Composable
+private fun ActiveSessionHeroCard(
+    state: AutoClickerDataState,
+    runtime: OverlayRuntimeState,
+    onToggleClicking: () -> Unit,
+    onCloseOverlay: () -> Unit
+) {
+    val active = runtime.isOverlayVisible
+    val statusDotColor by animateColorAsState(
+        targetValue = when {
+            active && runtime.isClicking -> Color(0xFF10B981)
+            active -> MiuixTheme.colorScheme.primary
+            runtime.isAccessibilityEnabled -> Color(0xFF10B981)
+            else -> Color(0xFFF59E0B)
+        },
+        animationSpec = tween(220),
+        label = "heroStatusDotColor"
+    )
+    val badgeBg by animateColorAsState(
+        targetValue = statusDotColor.copy(alpha = 0.14f),
+        animationSpec = tween(220),
+        label = "heroBadgeBg"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        cornerRadius = 22.dp,
+        insideMargin = PaddingValues(18.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .squircleBackground(badgeBg, 10.dp)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .squircleBackground(statusDotColor, 4.dp)
+                    )
+                    Text(
+                        text = when {
+                            active && runtime.isClicking -> "자동 클릭 진행 중"
+                            active -> "오버레이 대기 중"
+                            runtime.isAccessibilityEnabled -> "실행 준비 완료"
+                            else -> "접근성 권한 대기"
+                        },
+                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Bold),
+                        color = statusDotColor
+                    )
+                }
+
+                if (active) {
+                    Text(
+                        text = ClickEngineCalculator.formatElapsedMmSs(runtime.elapsedMs),
+                        style = MiuixTheme.textStyles.title3.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            if (active) {
+                val modeTitle = if (runtime.activeMode == ClickMode.SINGLE) {
+                    "단일 타겟 오버레이"
+                } else {
+                    "다중 타겟 오버레이 (${state.multiTargets.size}개 지점)"
+                }
+                val cfg = if (runtime.activeMode == ClickMode.SINGLE) state.singleConfig else state.multiConfig
+                val repeatText = ClickEngineCalculator.formatRepeatStatusBadge(cfg, runtime.elapsedMs, runtime.clickCount)
+
+                Text(
+                    text = modeTitle,
+                    style = MiuixTheme.textStyles.title4.copy(fontWeight = FontWeight.Bold),
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HeroMetricPill(
+                        label = "누적 클릭",
+                        value = "${runtime.clickCount}회",
+                        modifier = Modifier.weight(1f)
+                    )
+                    HeroMetricPill(
+                        label = "반복 상태",
+                        value = repeatText,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HeroMetricPill(
+                        label = "기본 간격",
+                        value = "${ClickEngineCalculator.toMillis(cfg.intervalValue, cfg.intervalUnit)}ms",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = onToggleClicking,
+                        modifier = Modifier.weight(1f),
+                        colors = if (runtime.isClicking) {
+                            ButtonDefaults.buttonColors()
+                        } else {
+                            ButtonDefaults.buttonColorsPrimary()
+                        }
+                    ) {
+                        Text(
+                            text = if (runtime.isClicking) "일시정지" else "클릭 시작",
+                            style = MiuixTheme.textStyles.button,
+                            color = if (runtime.isClicking) {
+                                MiuixTheme.colorScheme.onSurface
+                            } else {
+                                MiuixTheme.colorScheme.onPrimary
+                            }
+                        )
+                    }
+                    Button(
+                        onClick = onCloseOverlay,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(color = Color(0xFFD93025).copy(alpha = 0.14f))
+                    ) {
+                        Text(
+                            text = "오버레이 닫기",
+                            style = MiuixTheme.textStyles.button,
+                            color = Color(0xFFD93025)
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = "원하는 모드를 바로 실행하세요",
+                    style = MiuixTheme.textStyles.title4.copy(fontWeight = FontWeight.Bold),
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HeroMetricPill(
+                        label = "단일 간격",
+                        value = "${ClickEngineCalculator.toMillis(state.singleConfig.intervalValue, state.singleConfig.intervalUnit)}ms",
+                        modifier = Modifier.weight(1f)
+                    )
+                    HeroMetricPill(
+                        label = "다중 지점",
+                        value = "${state.multiTargets.size}개",
+                        modifier = Modifier.weight(1f)
+                    )
+                    HeroMetricPill(
+                        label = "프리셋",
+                        value = "${state.presets.size}개",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroMetricPill(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .squircleBackground(MiuixTheme.colorScheme.surfaceContainerHigh, 12.dp)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = label,
+            style = MiuixTheme.textStyles.footnote2,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = value,
+            style = MiuixTheme.textStyles.body2.copy(
+                fontWeight = FontWeight.Bold,
+                fontFeatureSettings = "tnum"
+            ),
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun QuickActionGridCard(
+    icon: ImageVector,
+    accentColor: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .squircleClip(18.dp)
+            .clickable(onClick = onClick),
+        cornerRadius = 18.dp,
+        insideMargin = PaddingValues(14.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MiuixGlassIcon(
+                icon = icon,
+                contentDescription = title,
+                accentColor = accentColor,
+                size = 36.dp,
+                iconSize = 18.dp
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Bold),
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun StackedModeLaunchCard(
     title: String,
     subtitle: String,
@@ -390,9 +698,21 @@ private fun StackedModeLaunchCard(
     onLaunchClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
+    val actionBg by animateColorAsState(
+        targetValue = if (isActive) Color(0xFFD93025).copy(alpha = 0.14f) else MiuixTheme.colorScheme.primary,
+        animationSpec = tween(220),
+        label = "launchButtonBg"
+    )
+    val actionFg by animateColorAsState(
+        targetValue = if (isActive) Color(0xFFD93025) else MiuixTheme.colorScheme.onPrimary,
+        animationSpec = tween(220),
+        label = "launchButtonFg"
+    )
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize()
             .squircleClip(20.dp)
             .clickable(onClick = onLaunchClick),
         cornerRadius = 20.dp,
@@ -428,7 +748,6 @@ private fun StackedModeLaunchCard(
                 )
             }
 
-            // Right-side Launch/Close action + Mode Settings button
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -436,14 +755,7 @@ private fun StackedModeLaunchCard(
                 Box(
                     modifier = Modifier
                         .height(38.dp)
-                        .squircleBackground(
-                            color = if (isActive) {
-                                Color(0xFFD93025).copy(alpha = 0.14f)
-                            } else {
-                                MiuixTheme.colorScheme.primary
-                            },
-                            cornerRadius = 12.dp
-                        )
+                        .squircleBackground(color = actionBg, cornerRadius = 12.dp)
                         .squircleClip(12.dp)
                         .clickable(onClick = onLaunchClick)
                         .padding(horizontal = 12.dp),
@@ -456,7 +768,7 @@ private fun StackedModeLaunchCard(
                         Icon(
                             imageVector = if (isActive) MiuixIcons.Pause else MiuixIcons.Play,
                             contentDescription = null,
-                            tint = if (isActive) Color(0xFFD93025) else MiuixTheme.colorScheme.onPrimary,
+                            tint = actionFg,
                             modifier = Modifier.size(15.dp)
                         )
                         Text(
@@ -466,7 +778,7 @@ private fun StackedModeLaunchCard(
                                 else -> "실행"
                             },
                             style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Bold),
-                            color = if (isActive) Color(0xFFD93025) else MiuixTheme.colorScheme.onPrimary
+                            color = actionFg
                         )
                     }
                 }

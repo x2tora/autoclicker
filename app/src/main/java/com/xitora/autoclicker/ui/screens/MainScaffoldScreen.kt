@@ -3,28 +3,45 @@ package com.xitora.autoclicker.ui.screens
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.ClickMode
+import com.xitora.autoclicker.model.NavBarStyle
+import com.xitora.autoclicker.model.OverlayRuntimeState
 import com.xitora.autoclicker.ui.components.AccessibilityPermissionGuideDialog
 import com.xitora.autoclicker.ui.components.AppUpdateDialog
+import com.xitora.autoclicker.ui.components.ExpandableQuickAddMenuOverlay
 import com.xitora.autoclicker.ui.components.FloatingLiquidGlassNavBar
+import com.xitora.autoclicker.ui.components.QuickAddMenuScrim
+import com.xitora.autoclicker.ui.components.QuickMenuAction
 import com.xitora.autoclicker.ui.components.SavePresetDialog
 import com.xitora.autoclicker.ui.components.StackedToastHost
 import com.xitora.autoclicker.ui.components.StackedToastState
+import com.xitora.autoclicker.ui.components.StandardMiuixNavBar
 import com.xitora.autoclicker.ui.components.rememberStackedToastState
 import com.xitora.autoclicker.ui.theme.LocalAppBackdrop
 import com.xitora.autoclicker.viewmodel.AutoClickerViewModel
@@ -39,13 +56,15 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.*
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import top.yukonga.miuix.kmp.nav.core.NavKey
 import top.yukonga.miuix.kmp.nav.core.rememberNavBackStack
 import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.squircle.squircleBackground
+import top.yukonga.miuix.kmp.squircle.squircleBorder
+import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Serializable
@@ -128,24 +147,32 @@ private fun MainTabsHost(
     val updateUiState by viewModel.updateUiState.collectAsStateWithLifecycle()
     val surfaceBg = MiuixTheme.colorScheme.surface
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=홈, 1=프리셋, 2=테스트
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=홈, 1=프리셋, 2=테스트, 3=가이드
+    var showQuickMenu by remember { mutableStateOf(false) }
     var showAccessibilityGuide by remember { mutableStateOf(false) }
     var presetSaveMode by remember { mutableStateOf<ClickMode?>(null) }
     var lastBackPressMs by remember { mutableLongStateOf(0L) }
+    val homeListState = rememberLazyListState()
     val context = LocalContext.current
 
     val notify: (String) -> Unit = { msg -> toastState.show(msg) }
+    val selectTab: (Int) -> Unit = { index ->
+        showQuickMenu = false
+        selectedTab = index.coerceIn(0, 3)
+    }
 
     BackHandler {
-        if (selectedTab != 0) {
-            selectedTab = 0
-        } else {
-            val now = System.currentTimeMillis()
-            if (now - lastBackPressMs <= 2000L) {
-                (context as? Activity)?.finish()
-            } else {
-                lastBackPressMs = now
-                notify("한 번 더 누르면 앱이 종료됩니다")
+        when {
+            showQuickMenu -> showQuickMenu = false
+            selectedTab != 0 -> selectedTab = 0
+            else -> {
+                val now = System.currentTimeMillis()
+                if (now - lastBackPressMs <= 2000L) {
+                    (context as? Activity)?.finish()
+                } else {
+                    lastBackPressMs = now
+                    notify("한 번 더 누르면 앱이 종료됩니다")
+                }
             }
         }
     }
@@ -164,10 +191,42 @@ private fun MainTabsHost(
         }
     }
 
+    val handleToggleClicking: () -> Unit = {
+        val ok = viewModel.toggleOverlayClicking()
+        if (!ok) {
+            showAccessibilityGuide = true
+        }
+    }
+
+    val liveTickerProgress by remember {
+        derivedStateOf {
+            if (selectedTab != 0) {
+                0f
+            } else {
+                val heroItem = homeListState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == 0 }
+                when {
+                    heroItem == null -> if (homeListState.firstVisibleItemIndex > 0) 1f else 0f
+                    heroItem.size <= 0 -> 0f
+                    else -> {
+                        val hiddenRatio = (-heroItem.offset.toFloat()) / heroItem.size.toFloat()
+                        ((hiddenRatio - 0.35f) / 0.45f).coerceIn(0f, 1f)
+                    }
+                }
+            }
+        }
+    }
+    val tickerAlpha by animateFloatAsState(
+        targetValue = liveTickerProgress,
+        animationSpec = tween(160),
+        label = "liveTickerAlpha"
+    )
+
+    val navBarStyle = state.settings.resolvedNavBarStyle()
+    val bottomBarExtraPadding = if (navBarStyle == NavBarStyle.LIQUID_GLASS) 104.dp else 90.dp
     val scrollBehavior = MiuixScrollBehavior(state = rememberTopAppBarState())
     val useShader = isRuntimeShaderSupported()
     val barOverlayColor = MiuixTheme.colorScheme.surface.copy(alpha = if (useShader) 0.72f else 0.96f)
-    val tabTitles = listOf("오토 클리커", "프리셋 보관함", "터치 테스트")
+    val tabTitles = listOf("오토 클리커", "프리셋 보관함", "터치 테스트", "권한 · 사용 가이드")
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -189,10 +248,14 @@ private fun MainTabsHost(
             Box(modifier = topBlurMod) {
                 SmallTopAppBar(
                     title = tabTitles[selectedTab],
+                    titleColor = MiuixTheme.colorScheme.onSurface.copy(alpha = (1f - tickerAlpha).coerceIn(0f, 1f)),
                     color = Color.Transparent,
                     scrollBehavior = scrollBehavior,
                     actions = {
-                        IconButton(onClick = onOpenSettings) {
+                        IconButton(onClick = {
+                            showQuickMenu = false
+                            onOpenSettings()
+                        }) {
                             Icon(
                                 imageVector = MiuixIcons.Regular.Settings,
                                 contentDescription = "설정 및 백업",
@@ -201,11 +264,35 @@ private fun MainTabsHost(
                         }
                     }
                 )
+                if (tickerAlpha > 0.01f) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .statusBarsPadding()
+                            .padding(start = 20.dp, end = 64.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        PinnedHeaderLiveTicker(
+                            runtime = runtime,
+                            onAction = {
+                                if (runtime.isOverlayVisible) {
+                                    handleToggleClicking()
+                                } else {
+                                    handleLaunchOrToggleOverlay(runtime.activeMode)
+                                }
+                            },
+                            modifier = Modifier.graphicsLayer {
+                                alpha = tickerAlpha
+                                translationY = (1f - tickerAlpha) * 14f
+                            }
+                        )
+                    }
+                }
             }
         }
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
-            // ① Capture layer ONLY: surface background + scrolling pages
+            // Capture layer ONLY: surface background + scrolling pages
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -220,17 +307,30 @@ private fun MainTabsHost(
                     AnimatedContent(
                         targetState = selectedTab,
                         transitionSpec = {
-                            (fadeIn(tween(220)) + scaleIn(initialScale = 0.98f, animationSpec = tween(220)))
-                                .togetherWith(fadeOut(tween(180)))
+                            val forward = targetState > initialState
+                            val slideOffset: (Int) -> Int = { fullWidth ->
+                                val delta = (fullWidth * 0.10f).toInt().coerceAtLeast(1)
+                                if (forward) delta else -delta
+                            }
+                            val exitOffset: (Int) -> Int = { fullWidth ->
+                                val delta = (fullWidth * 0.08f).toInt().coerceAtLeast(1)
+                                if (forward) -delta else delta
+                            }
+                            (fadeIn(tween(220)) + slideInHorizontally(tween(260), slideOffset))
+                                .togetherWith(fadeOut(tween(180)) + slideOutHorizontally(tween(200), exitOffset))
+                                .using(SizeTransform(clip = false))
                         },
                         label = "mainTabTransition"
                     ) { tab ->
                         when (tab) {
                             0 -> HomeScreen(
+                                listState = homeListState,
                                 state = state,
                                 runtime = runtime,
                                 scrollBehavior = scrollBehavior,
+                                bottomBarExtraPadding = bottomBarExtraPadding,
                                 onLaunchMode = { mode -> handleLaunchOrToggleOverlay(mode) },
+                                onToggleClicking = handleToggleClicking,
                                 onOpenAccessibilitySettings = { showAccessibilityGuide = true },
                                 onOpenAppInfoSettings = { viewModel.openAppInfoSettings() },
                                 onUpdateSingleConfig = viewModel::updateSingleConfig,
@@ -239,11 +339,13 @@ private fun MainTabsHost(
                                 onUpdateTarget = viewModel::updateMultiTarget,
                                 onDeleteTarget = { id -> viewModel.removeMultiTargetById(id) },
                                 onSavePresetClick = { mode -> presetSaveMode = mode },
+                                onNavigateTab = selectTab,
                                 onNotify = notify
                             )
                             1 -> PresetsScreen(
                                 state = state,
                                 scrollBehavior = scrollBehavior,
+                                bottomBarExtraPadding = bottomBarExtraPadding,
                                 onApplyPreset = { preset, launchImmediately ->
                                     viewModel.applyPreset(preset)
                                     if (launchImmediately) {
@@ -269,11 +371,28 @@ private fun MainTabsHost(
                                 onSaveCurrentSingle = { presetSaveMode = ClickMode.SINGLE },
                                 onSaveCurrentMulti = { presetSaveMode = ClickMode.MULTI }
                             )
-                            else -> TouchTestScreen(scrollBehavior = scrollBehavior)
+                            2 -> TouchTestScreen(
+                                scrollBehavior = scrollBehavior,
+                                bottomBarExtraPadding = bottomBarExtraPadding
+                            )
+                            else -> GuideScreen(
+                                isAccessibilityEnabled = runtime.isAccessibilityEnabled,
+                                scrollBehavior = scrollBehavior,
+                                bottomBarExtraPadding = bottomBarExtraPadding,
+                                onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
+                                onOpenAppInfoSettings = { viewModel.openAppInfoSettings() }
+                            )
                         }
                     }
                 }
             }
+
+            // Scrim placed BELOW bottom nav bar so active bar & "+"/"×" button remain sharp.
+            QuickAddMenuScrim(
+                visible = showQuickMenu,
+                onDismiss = { showQuickMenu = false },
+                modifier = Modifier.fillMaxSize()
+            )
 
             // Keep floating overlays outside layerBackdrop to avoid cyclic RenderNode graphs.
             StackedToastHost(
@@ -281,18 +400,100 @@ private fun MainTabsHost(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 92.dp)
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = if (navBarStyle == NavBarStyle.LIQUID_GLASS) 92.dp else 86.dp
+                    )
             )
 
-            FloatingLiquidGlassNavBar(
-                backdrop = barBackdrop,
-                selectedTab = selectedTab,
-                presetCount = state.presets.size,
-                onSelectTab = { selectedTab = it },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
+            val isAccessibilityMissing = !runtime.isAccessibilityEnabled
+            when (navBarStyle) {
+                NavBarStyle.MIUIX -> StandardMiuixNavBar(
+                    selectedTab = selectedTab,
+                    presetCount = state.presets.size,
+                    showAccessibilityDot = isAccessibilityMissing,
+                    isCenterAddSelected = showQuickMenu,
+                    onSelectTab = selectTab,
+                    onToggleCenterAdd = { showQuickMenu = !showQuickMenu },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+                NavBarStyle.LIQUID_GLASS -> FloatingLiquidGlassNavBar(
+                    backdrop = barBackdrop,
+                    selectedTab = selectedTab,
+                    presetCount = state.presets.size,
+                    showAccessibilityDot = isAccessibilityMissing,
+                    isCenterAddSelected = showQuickMenu,
+                    onSelectTab = selectTab,
+                    onToggleCenterAdd = { showQuickMenu = !showQuickMenu },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                )
+            }
+
+            val isSingleVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.SINGLE
+            val isMultiVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.MULTI
+            val quickMenuActions = remember(
+                isSingleVisible,
+                isMultiVisible,
+                runtime.isOverlayVisible,
+                runtime.isClicking,
+                runtime.activeMode
+            ) {
+                buildList {
+                    add(
+                        QuickMenuAction(
+                            id = "launch_single",
+                            title = if (isSingleVisible) "단일 타겟 오버레이 닫기" else "단일 타겟 오버레이 실행",
+                            subtitle = if (isSingleVisible) "화면의 단일 타겟 패널을 종료합니다" else "1개 포인트 반복 터치 패널 띄우기",
+                            icon = MiuixIcons.Location,
+                            accentColor = Color(0xFF3482FF),
+                            onClick = { handleLaunchOrToggleOverlay(ClickMode.SINGLE) }
+                        )
+                    )
+                    add(
+                        QuickMenuAction(
+                            id = "launch_multi",
+                            title = if (isMultiVisible) "다중 타겟 오버레이 닫기" else "다중 타겟 오버레이 실행",
+                            subtitle = if (isMultiVisible) "화면의 다중 타겟 패널을 종료합니다" else "순서대로 여러 지점 자동 터치 실행",
+                            icon = MiuixIcons.Layers,
+                            accentColor = Color(0xFF7C5CFF),
+                            onClick = { handleLaunchOrToggleOverlay(ClickMode.MULTI) }
+                        )
+                    )
+                    if (runtime.isOverlayVisible) {
+                        add(
+                            QuickMenuAction(
+                                id = "toggle_clicking",
+                                title = if (runtime.isClicking) "자동 터치 일시정지" else "자동 터치 바로 시작",
+                                subtitle = "${runtime.activeMode.label} 모드 실시간 제어",
+                                icon = if (runtime.isClicking) MiuixIcons.Pause else MiuixIcons.Play,
+                                accentColor = if (runtime.isClicking) Color(0xFFF59E0B) else Color(0xFF10B981),
+                                onClick = handleToggleClicking
+                            )
+                        )
+                    } else {
+                        add(
+                            QuickMenuAction(
+                                id = "save_preset",
+                                title = "현재 설정 프리셋 저장",
+                                subtitle = "${runtime.activeMode.label} 설정을 보관함에 기록",
+                                icon = MiuixIcons.Favorites,
+                                accentColor = Color(0xFF06B6D4),
+                                onClick = { presetSaveMode = runtime.activeMode }
+                            )
+                        )
+                    }
+                }
+            }
+
+            ExpandableQuickAddMenuOverlay(
+                visible = showQuickMenu,
+                navBarStyle = navBarStyle,
+                actions = quickMenuActions,
+                onDismiss = { showQuickMenu = false }
             )
 
 
@@ -369,6 +570,7 @@ private fun SettingsScreenHost(
                 onUpdateTheme = viewModel::updateTheme,
                 onUpdateThemeColorStyle = viewModel::updateThemeColorStyle,
                 onUpdateCustomKeyColor = viewModel::updateCustomKeyColor,
+                onUpdateNavBarStyle = viewModel::updateNavBarStyle,
                 onUpdateTargetSizeDp = viewModel::updateTargetSizeDp,
                 onUpdateTargetOpacity = viewModel::updateTargetOpacity,
                 onUpdateShowAntiBotZoneGuide = viewModel::updateShowAntiBotZoneGuide,
@@ -395,5 +597,61 @@ private fun SettingsScreenHost(
                 onOpenPermissionSettings = viewModel::openInstallUnknownSourcesSettings
             )
         }
+    }
+}
+
+@Composable
+private fun PinnedHeaderLiveTicker(
+    runtime: OverlayRuntimeState,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = when {
+        runtime.isClicking -> Color(0xFF10B981)
+        runtime.isOverlayVisible -> MiuixTheme.colorScheme.primary
+        runtime.isAccessibilityEnabled -> MiuixTheme.colorScheme.primary
+        else -> Color(0xFFF59E0B)
+    }
+    val statusLabel = when {
+        runtime.isClicking ->
+            "실행 중 · ${ClickEngineCalculator.formatElapsedMmSs(runtime.elapsedMs)} · ${runtime.clickCount}회"
+        runtime.isOverlayVisible ->
+            "${runtime.activeMode.label} 오버레이 표시 중"
+        runtime.isAccessibilityEnabled ->
+            "오토 클리커 · 준비됨 (${runtime.activeMode.label})"
+        else ->
+            "권한 필요 · 탭하여 확인"
+    }
+
+    Row(
+        modifier = modifier
+            .squircleClip(20.dp)
+            .squircleBackground(
+                color = accent.copy(alpha = 0.12f),
+                cornerRadius = 20.dp
+            )
+            .squircleBorder(
+                width = 1.dp,
+                color = accent.copy(alpha = 0.28f),
+                cornerRadius = 20.dp
+            )
+            .clickable(onClick = onAction)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(accent)
+        )
+        Text(
+            text = statusLabel,
+            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

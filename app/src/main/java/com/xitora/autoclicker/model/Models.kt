@@ -18,6 +18,12 @@ enum class ThemeColorStyle(val label: String, val description: String) {
 }
 
 @Serializable
+enum class NavBarStyle(val label: String, val description: String) {
+    MIUIX("Miuix 기본", "표준 Miuix 하단 내비게이션 바"),
+    LIQUID_GLASS("리퀴드 글래스", "AGSL 굴절 효과가 적용된 플로팅 바")
+}
+
+@Serializable
 enum class ClickMode(val label: String) {
     SINGLE("단일 타겟 모드"),
     MULTI("다중 타겟 모드")
@@ -81,11 +87,13 @@ data class AppSettings(
     val themeOption: ThemeOption = ThemeOption.SYSTEM,
     val themeColorStyle: ThemeColorStyle = ThemeColorStyle.DEFAULT,
     val customKeyColorHex: Long? = 0xFF3482FF,
+    val navBarStyle: NavBarStyle = NavBarStyle.MIUIX,
     val targetSizeDp: Int = 46,
     val targetOpacityPercent: Int = 92,
     val showAntiBotZoneGuide: Boolean = true
 ) {
     fun resolvedColorStyle(): ThemeColorStyle = themeColorStyle
+    fun resolvedNavBarStyle(): NavBarStyle = navBarStyle
 }
 
 @Serializable

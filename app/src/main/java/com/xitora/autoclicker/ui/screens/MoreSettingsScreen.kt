@@ -2,6 +2,13 @@ package com.xitora.autoclicker.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,6 +53,7 @@ fun MoreSettingsScreen(
     onUpdateTheme: (ThemeOption) -> Unit,
     onUpdateThemeColorStyle: (ThemeColorStyle) -> Unit,
     onUpdateCustomKeyColor: (Long?) -> Unit,
+    onUpdateNavBarStyle: (NavBarStyle) -> Unit,
     onUpdateTargetSizeDp: (Int) -> Unit,
     onUpdateTargetOpacity: (Int) -> Unit,
     onUpdateShowAntiBotZoneGuide: (Boolean) -> Unit,
@@ -103,17 +111,24 @@ fun MoreSettingsScreen(
         }
     }
 
+    val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val preferenceMargin = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .overScrollVertical()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 110.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp + navBottomInset),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             SmallTitle(text = "화면 · 테마 설정")
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize()
+            ) {
                 val options = ThemeOption.entries
                 OverlayDropdownPreference(
                     title = "테마 모드",
@@ -121,6 +136,7 @@ fun MoreSettingsScreen(
                     items = options.map { it.label },
                     selectedIndex = options.indexOf(state.settings.themeOption),
                     onSelectedIndexChange = { onUpdateTheme(options[it]) },
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Theme,
@@ -129,7 +145,7 @@ fun MoreSettingsScreen(
                         )
                     }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 val colorStyles = ThemeColorStyle.entries
                 val colorStyle = state.settings.resolvedColorStyle()
                 OverlayDropdownPreference(
@@ -142,6 +158,7 @@ fun MoreSettingsScreen(
                         onUpdateThemeColorStyle(chosen)
                         onNotify("테마 컬러가 '${chosen.label}'으로 적용되었습니다.")
                     },
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Favorites,
@@ -150,23 +167,52 @@ fun MoreSettingsScreen(
                         )
                     }
                 )
-                if (colorStyle == ThemeColorStyle.CUSTOM) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    val previewHex = state.settings.customKeyColorHex ?: 0xFF3482FF
-                    ArrowPreference(
-                        title = "커스텀 포인트 색상 지정",
-                        summary = "현재 ${formatRgbHex(previewHex)} 적용 중 · 탭하여 변경",
-                        onClick = { showAppColorDialog = true },
-                        startAction = {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(previewHex))
-                            )
-                        }
-                    )
+                AnimatedVisibility(
+                    visible = colorStyle == ThemeColorStyle.CUSTOM,
+                    enter = expandVertically(tween(220)) + fadeIn(tween(220)),
+                    exit = shrinkVertically(tween(180)) + fadeOut(tween(180))
+                ) {
+                    Column {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                        val previewHex = state.settings.customKeyColorHex ?: 0xFF3482FF
+                        ArrowPreference(
+                            title = "커스텀 포인트 색상 지정",
+                            summary = "현재 ${formatRgbHex(previewHex)} 적용 중 · 탭하여 변경",
+                            onClick = { showAppColorDialog = true },
+                            insideMargin = preferenceMargin,
+                            startAction = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(previewHex))
+                                )
+                            }
+                        )
+                    }
                 }
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                val navStyles = NavBarStyle.entries
+                val navStyle = state.settings.resolvedNavBarStyle()
+                OverlayDropdownPreference(
+                    title = "내비게이션 바 스타일",
+                    summary = "${navStyle.label} · ${navStyle.description}",
+                    items = navStyles.map { it.label },
+                    selectedIndex = navStyles.indexOf(navStyle),
+                    onSelectedIndexChange = { index ->
+                        val chosen = navStyles[index]
+                        onUpdateNavBarStyle(chosen)
+                        onNotify("내비게이션 바가 '${chosen.label}' 스타일로 변경되었습니다.")
+                    },
+                    insideMargin = preferenceMargin,
+                    startAction = {
+                        MiuixGlassIcon(
+                            icon = MiuixIcons.Tune,
+                            contentDescription = null,
+                            accentColor = Color(0xFF06B6D4)
+                        )
+                    }
+                )
             }
         }
 
@@ -181,6 +227,7 @@ fun MoreSettingsScreen(
                         "비활성화됨 · 탭하여 안드로이드 접근성 설정 열기"
                     },
                     onClick = onOpenAccessibilitySettings,
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Settings,
@@ -189,11 +236,12 @@ fun MoreSettingsScreen(
                         )
                     }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 ArrowPreference(
                     title = "타겟 과녁 크기 · 투명도",
                     summary = "크기 ${state.settings.targetSizeDp}dp · 불투명도 ${state.settings.targetOpacityPercent}%",
                     onClick = { showOverlayStyleDialog = true },
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Location,
@@ -202,12 +250,13 @@ fun MoreSettingsScreen(
                         )
                     }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 SwitchPreference(
                     title = "봇 방지 랜덤 영역 점선 원 표시",
                     summary = "랜덤 클릭 기능이 켜져 있을 때 타겟 주위에 점선 가이드를 그립니다",
                     checked = state.settings.showAntiBotZoneGuide,
                     onCheckedChange = onUpdateShowAntiBotZoneGuide,
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Stopwatch,
@@ -229,6 +278,7 @@ fun MoreSettingsScreen(
                         val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
                         exportFileLauncher.launch("autoclicker-backup-$today.json")
                     },
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Backup,
@@ -237,13 +287,14 @@ fun MoreSettingsScreen(
                         )
                     }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 ArrowPreference(
                     title = "JSON 파일에서 가져오기 (복원)",
                     summary = "저장해 둔 JSON 백업 파일을 불러와 설정과 프리셋을 복원합니다",
                     onClick = {
                         importFileLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                     },
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Import,
@@ -252,11 +303,12 @@ fun MoreSettingsScreen(
                         )
                     }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 ArrowPreference(
                     title = "클립보드 백업 텍스트 복사 / 붙여넣기 복원",
                     summary = "파일 없이 JSON 텍스트로 바로 백업하거나 복원합니다",
                     onClick = { showPasteRestoreDialog = true },
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Copy,
@@ -265,11 +317,12 @@ fun MoreSettingsScreen(
                         )
                     }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 ArrowPreference(
                     title = "모든 데이터 초기화",
                     summary = "등록된 타겟 구성과 프리셋을 초기 상태로 되돌립니다 (테마 설정 유지)",
                     onClick = { showResetConfirm = true },
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Reset,
@@ -292,6 +345,7 @@ fun MoreSettingsScreen(
                         else -> "현재 v${BuildConfig.VERSION_NAME} · 앱 실행 시 자동 확인 (탭하여 지금 확인)"
                     },
                     onClick = onCheckForUpdate,
+                    insideMargin = preferenceMargin,
                     startAction = {
                         MiuixGlassIcon(
                             icon = MiuixIcons.Store,
@@ -300,9 +354,9 @@ fun MoreSettingsScreen(
                         )
                     }
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
