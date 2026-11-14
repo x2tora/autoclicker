@@ -539,7 +539,8 @@ fun TargetPreviewBadge(
 fun AccessibilityPermissionGuideDialog(
     show: Boolean,
     onDismiss: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenAppInfo: () -> Unit
 ) {
     OverlayDialog(
         show = show,
@@ -561,19 +562,47 @@ fun AccessibilityPermissionGuideDialog(
                         color = MiuixTheme.colorScheme.primary
                     )
                     Text(
-                        text = "1. 아래 [설정으로 이동]을 누릅니다.\n2. [설치된 앱] 또는 [다운로드한 앱]에서 '오토 클리커'를 선택합니다.\n3. 스위치를 켜고 허용을 누른 뒤 돌아오면 바로 사용할 수 있습니다.",
+                        text = "1. 아래 [접근성 설정]을 누릅니다.\n2. [설치된 앱] 또는 [다운로드한 앱]에서 '오토 클리커'를 선택합니다.\n3. 스위치를 켜고 허용을 누른 뒤 돌아오면 바로 사용할 수 있습니다.",
                         style = MiuixTheme.textStyles.footnote2,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
                 }
             }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .squircleBackground(Color(0xFFF59E0B).copy(alpha = 0.10f), 14.dp)
+                    .squircleBorder(1.dp, Color(0xFFF59E0B).copy(alpha = 0.25f), 14.dp)
+                    .padding(12.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "스위치가 안 눌리는 경우 (OneUI · Android 13+)",
+                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFD97706)
+                    )
+                    Text(
+                        text = "일부 기기에서는 보안상 접근성이 잠겨 있을 수 있습니다.\n[앱 정보 열기] → 우측 상단 ⋮ 메뉴 → [제한된 설정 허용]을 먼저 누른 뒤 다시 접근성 설정에서 켜주세요.",
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+            }
+            TextButton(
+                text = "앱 정보 열기 (제한된 설정 허용)",
+                onClick = {
+                    onDismiss()
+                    onOpenAppInfo()
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 TextButton(text = "닫기", onClick = onDismiss, modifier = Modifier.weight(1f))
                 TextButton(
-                    text = "설정으로 이동",
+                    text = "접근성 설정",
                     onClick = {
                         onDismiss()
                         onOpenSettings()

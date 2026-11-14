@@ -232,6 +232,7 @@ private fun MainTabsHost(
                                 scrollBehavior = scrollBehavior,
                                 onLaunchMode = { mode -> handleLaunchOrToggleOverlay(mode) },
                                 onOpenAccessibilitySettings = { showAccessibilityGuide = true },
+                                onOpenAppInfoSettings = { viewModel.openAppInfoSettings() },
                                 onUpdateSingleConfig = viewModel::updateSingleConfig,
                                 onUpdateMultiConfig = { viewModel.updateMultiConfig(it, syncToTargets = true) },
                                 onAddTarget = { viewModel.addMultiTarget() },
@@ -298,7 +299,8 @@ private fun MainTabsHost(
             AccessibilityPermissionGuideDialog(
                 show = showAccessibilityGuide,
                 onDismiss = { showAccessibilityGuide = false },
-                onOpenSettings = { viewModel.openAccessibilitySettings() }
+                onOpenSettings = { viewModel.openAccessibilitySettings() },
+                onOpenAppInfo = { viewModel.openAppInfoSettings() }
             )
 
             presetSaveMode?.let { mode ->

@@ -2,6 +2,7 @@ package com.xitora.autoclicker.viewmodel
 
 import android.app.Application
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -284,5 +285,13 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun openInstallUnknownSourcesSettings() {
         AppUpdater.openInstallPermissionSettings(appContext)
+    }
+
+    fun openAppInfoSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", appContext.packageName, null)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { appContext.startActivity(intent) }
     }
 }

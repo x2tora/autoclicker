@@ -44,6 +44,7 @@ fun HomeScreen(
     scrollBehavior: ScrollBehavior,
     onLaunchMode: (ClickMode) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
+    onOpenAppInfoSettings: () -> Unit,
     onUpdateSingleConfig: (ClickTimingConfig) -> Unit,
     onUpdateMultiConfig: (ClickTimingConfig) -> Unit,
     onAddTarget: () -> Unit,
@@ -87,7 +88,7 @@ fun HomeScreen(
                                     color = MiuixTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "오토 클리커가 화면 터치를 대신 수행하려면 접근성 권한을 켜주세요.",
+                                    text = "오토 클리커가 화면 터치를 대신 수행하려면 접근성 권한을 켜주세요.\n(OneUI 등 일부 기기에서 스위치가 안 눌리면 '앱 정보 → ⋮ → 제한된 설정 허용'을 먼저 켜주세요.)",
                                     style = MiuixTheme.textStyles.footnote2,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
@@ -98,16 +99,33 @@ fun HomeScreen(
                                 contentColor = Color(0xFFD93025)
                             )
                         }
-                        Button(
-                            onClick = onOpenAccessibilitySettings,
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColorsPrimary()
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "접근성 설정 열기",
-                                style = MiuixTheme.textStyles.button,
-                                color = MiuixTheme.colorScheme.onPrimary
-                            )
+                            Button(
+                                onClick = onOpenAppInfoSettings,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors()
+                            ) {
+                                Text(
+                                    text = "앱 정보 (제한 해제)",
+                                    style = MiuixTheme.textStyles.button,
+                                    maxLines = 1
+                                )
+                            }
+                            Button(
+                                onClick = onOpenAccessibilitySettings,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColorsPrimary()
+                            ) {
+                                Text(
+                                    text = "접근성 설정 열기",
+                                    style = MiuixTheme.textStyles.button,
+                                    color = MiuixTheme.colorScheme.onPrimary,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
