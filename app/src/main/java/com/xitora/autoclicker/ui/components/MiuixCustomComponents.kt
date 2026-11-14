@@ -52,8 +52,16 @@ fun MiuixGlassIcon(
     cornerRadius: Dp = 12.dp
 ) {
     val isDark = LocalIsDarkTheme.current
-    val containerTint = accentColor.copy(alpha = if (isDark) 0.18f else 0.11f)
-    val borderTint = accentColor.copy(alpha = if (isDark) 0.30f else 0.18f)
+    val containerTint = if (isDark) {
+        Color.White.copy(alpha = 0.08f)
+    } else {
+        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+    }
+    val borderTint = if (isDark) {
+        Color.White.copy(alpha = 0.12f)
+    } else {
+        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.09f)
+    }
 
     Box(
         modifier = modifier

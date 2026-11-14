@@ -1,5 +1,7 @@
 package com.xitora.autoclicker.ui.screens
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -7,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xitora.autoclicker.model.ClickMode
@@ -120,8 +123,20 @@ private fun MainTabsHost(
 
     var showAccessibilityGuide by remember { mutableStateOf(false) }
     var presetSaveMode by remember { mutableStateOf<ClickMode?>(null) }
+    var lastBackPressMs by remember { mutableLongStateOf(0L) }
+    val context = LocalContext.current
 
     val notify: (String) -> Unit = { msg -> toastState.show(msg) }
+
+    BackHandler {
+        val now = System.currentTimeMillis()
+        if (now - lastBackPressMs <= 2000L) {
+            (context as? Activity)?.finish()
+        } else {
+            lastBackPressMs = now
+            notify("한 번 더 누르면 앱이 종료됩니다")
+        }
+    }
 
     val handleLaunchOrToggleOverlay: (ClickMode) -> Unit = { mode ->
         val ok = viewModel.toggleOverlay(mode)
