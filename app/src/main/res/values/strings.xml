@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">오토 클리커</string>
+    <string name="accessibility_service_label">오토 클리커 자동 터치 서비스</string>
+    <string name="accessibility_service_description">지정한 위치에 자동 클릭을 실행하고, 화면 위 플로팅 컨트롤 패널 및 타겟 지점 오버레이를 표시하기 위해 접근성 제스처 권한을 사용합니다. 화면 내용이나 개인정보를 수집하거나 전송하지 않습니다.</string>
+</resources>
