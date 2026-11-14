@@ -5,4 +5,10 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
+
+    <style name="Theme.AutoClicker.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#1B1C23</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.AutoClicker</item>
+    </style>
 </resources>

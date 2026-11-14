@@ -1,6 +1,10 @@
 package com.xitora.autoclicker
 
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.os.Bundle
+import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -8,6 +12,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.core.animation.doOnEnd
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,6 +25,19 @@ import com.xitora.autoclicker.viewmodel.AutoClickerViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
+        splashScreen.setOnExitAnimationListener { splashProvider ->
+            val fadeOut = ObjectAnimator.ofFloat(splashProvider.view, View.ALPHA, 1f, 0f)
+            val scaleX = ObjectAnimator.ofFloat(splashProvider.view, View.SCALE_X, 1f, 1.04f)
+            val scaleY = ObjectAnimator.ofFloat(splashProvider.view, View.SCALE_Y, 1f, 1.04f)
+            AnimatorSet().apply {
+                playTogether(fadeOut, scaleX, scaleY)
+                duration = 260L
+                interpolator = AccelerateDecelerateInterpolator()
+                doOnEnd { splashProvider.remove() }
+                start()
+            }
+        }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 

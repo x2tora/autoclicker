@@ -595,27 +595,27 @@ object OverlayModalFactory {
             setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(12f))
         })
 
-        // Interval row
-        var selectedIntervalUnit = initialConfig.intervalUnit
-        val intervalInput = createNumericEditText(context, initialConfig.intervalValue.toString(), cardSurface, textPrimary)
-        card.addView(makeSectionLabel(context, "클릭 간격", textPrimary))
+        var selectedIntervalUnit = TimeUnitOption.MS
+        val intervalMsInit = ClickEngineCalculator.toMillis(initialConfig.intervalValue, initialConfig.intervalUnit)
+        val intervalInput = createNumericEditText(context, intervalMsInit.toString(), cardSurface, textPrimary)
+        card.addView(makeSectionLabel(context, "클릭 간격 (ms)", textPrimary))
         card.addView(buildValueWithUnitSelector(context, intervalInput, selectedIntervalUnit, cardSurface, textPrimary, primaryBlue) {
             selectedIntervalUnit = it
         })
 
-        // Duration row
-        var selectedDurationUnit = initialConfig.durationUnit
-        val durationInput = createNumericEditText(context, initialConfig.durationValue.toString(), cardSurface, textPrimary)
-        card.addView(makeSectionLabel(context, "클릭 지속시간 (터치 유지)", textPrimary))
+        var selectedDurationUnit = TimeUnitOption.MS
+        val durationMsInit = ClickEngineCalculator.toMillis(initialConfig.durationValue, initialConfig.durationUnit)
+        val durationInput = createNumericEditText(context, durationMsInit.toString(), cardSurface, textPrimary)
+        card.addView(makeSectionLabel(context, "클릭 지속시간 (ms)", textPrimary))
         card.addView(buildValueWithUnitSelector(context, durationInput, selectedDurationUnit, cardSurface, textPrimary, primaryBlue) {
             selectedDurationUnit = it
         })
 
-        // Repeat options (when editing mode-wide settings)
         var selectedRepeatMode = initialConfig.repeatMode
-        var selectedRepeatDurationUnit = initialConfig.repeatDurationUnit
+        var selectedRepeatDurationUnit = TimeUnitOption.MS
+        val repeatDurationMsInit = ClickEngineCalculator.toMillis(initialConfig.repeatDurationValue, initialConfig.repeatDurationUnit)
         val repeatCountInput = createNumericEditText(context, initialConfig.repeatCount.toString(), cardSurface, textPrimary)
-        val repeatDurationInput = createNumericEditText(context, initialConfig.repeatDurationValue.toString(), cardSurface, textPrimary)
+        val repeatDurationInput = createNumericEditText(context, repeatDurationMsInit.toString(), cardSurface, textPrimary)
 
         if (showRepeatOptions) {
             card.addView(makeSectionLabel(context, "반복 조건", textPrimary))
@@ -869,27 +869,16 @@ object OverlayModalFactory {
             ).apply { bottomMargin = context.dpToPxInt(8f) }
         }
         wrapper.addView(editText.apply {
-            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(40f), 1.15f)
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(40f), 1f)
         })
 
-        var current = initialUnit
-        val unitChips = mutableListOf<Pair<TimeUnitOption, TextView>>()
-        TimeUnitOption.entries.forEach { unit ->
-            val chip = createPillChip(context, unit.symbol, unit == current, chipBg, textColor, activeColor).apply {
-                layoutParams = LinearLayout.LayoutParams(context.dpToPxInt(40f), context.dpToPxInt(36f)).apply {
-                    marginStart = context.dpToPxInt(4f)
-                }
-                setOnClickListener {
-                    current = unit
-                    onUnitSelected(unit)
-                    unitChips.forEach { (u, v) ->
-                        stylePillChip(context, v, u == current, chipBg, textColor, activeColor)
-                    }
-                }
+        onUnitSelected(TimeUnitOption.MS)
+        val msBadge = createPillChip(context, "ms", false, chipBg, textColor, activeColor).apply {
+            layoutParams = LinearLayout.LayoutParams(context.dpToPxInt(52f), context.dpToPxInt(38f)).apply {
+                marginStart = context.dpToPxInt(8f)
             }
-            unitChips.add(unit to chip)
-            wrapper.addView(chip)
         }
+        wrapper.addView(msBadge)
         return wrapper
     }
 

@@ -2,6 +2,12 @@ package com.xitora.autoclicker.ui.screens
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -15,6 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xitora.autoclicker.model.ClickMode
 import com.xitora.autoclicker.ui.components.AccessibilityPermissionGuideDialog
 import com.xitora.autoclicker.ui.components.AppUpdateDialog
+import com.xitora.autoclicker.ui.components.FloatingLiquidGlassNavBar
 import com.xitora.autoclicker.ui.components.SavePresetDialog
 import com.xitora.autoclicker.ui.components.StackedToastHost
 import com.xitora.autoclicker.ui.components.StackedToastState
@@ -121,6 +128,7 @@ private fun MainTabsHost(
     val updateUiState by viewModel.updateUiState.collectAsStateWithLifecycle()
     val surfaceBg = MiuixTheme.colorScheme.surface
 
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=홈, 1=프리셋, 2=테스트
     var showAccessibilityGuide by remember { mutableStateOf(false) }
     var presetSaveMode by remember { mutableStateOf<ClickMode?>(null) }
     var lastBackPressMs by remember { mutableLongStateOf(0L) }
@@ -129,12 +137,16 @@ private fun MainTabsHost(
     val notify: (String) -> Unit = { msg -> toastState.show(msg) }
 
     BackHandler {
-        val now = System.currentTimeMillis()
-        if (now - lastBackPressMs <= 2000L) {
-            (context as? Activity)?.finish()
+        if (selectedTab != 0) {
+            selectedTab = 0
         } else {
-            lastBackPressMs = now
-            notify("한 번 더 누르면 앱이 종료됩니다")
+            val now = System.currentTimeMillis()
+            if (now - lastBackPressMs <= 2000L) {
+                (context as? Activity)?.finish()
+            } else {
+                lastBackPressMs = now
+                notify("한 번 더 누르면 앱이 종료됩니다")
+            }
         }
     }
 
@@ -155,6 +167,7 @@ private fun MainTabsHost(
     val scrollBehavior = MiuixScrollBehavior(state = rememberTopAppBarState())
     val useShader = isRuntimeShaderSupported()
     val barOverlayColor = MiuixTheme.colorScheme.surface.copy(alpha = if (useShader) 0.72f else 0.96f)
+    val tabTitles = listOf("오토 클리커", "프리셋 보관함", "터치 테스트")
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -175,7 +188,7 @@ private fun MainTabsHost(
             }
             Box(modifier = topBlurMod) {
                 SmallTopAppBar(
-                    title = "오토 클리커",
+                    title = tabTitles[selectedTab],
                     color = Color.Transparent,
                     scrollBehavior = scrollBehavior,
                     actions = {
@@ -204,41 +217,60 @@ private fun MainTabsHost(
                         .fillMaxSize()
                         .padding(top = paddingValues.calculateTopPadding())
                 ) {
-                    StartScreen(
-                        state = state,
-                        runtime = runtime,
-                        scrollBehavior = scrollBehavior,
-                        onLaunchMode = { mode -> handleLaunchOrToggleOverlay(mode) },
-                        onOpenAccessibilitySettings = { showAccessibilityGuide = true },
-                        onUpdateSingleConfig = viewModel::updateSingleConfig,
-                        onUpdateMultiConfig = { viewModel.updateMultiConfig(it, syncToTargets = true) },
-                        onAddTarget = { viewModel.addMultiTarget() },
-                        onUpdateTarget = viewModel::updateMultiTarget,
-                        onDeleteTarget = { id -> viewModel.removeMultiTargetById(id) },
-                        onSavePresetClick = { mode -> presetSaveMode = mode },
-                        onApplyPreset = { preset, launchImmediately ->
-                            viewModel.applyPreset(preset)
-                            if (launchImmediately) {
-                                val ok = viewModel.startOverlay(preset.mode)
-                                if (!ok) {
-                                    showAccessibilityGuide = true
-                                } else {
-                                    notify("'${preset.name}' 프리셋으로 오버레이를 실행했습니다.")
-                                }
-                            } else {
-                                notify("'${preset.name}' 프리셋을 불러왔습니다.")
-                            }
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            (fadeIn(tween(220)) + scaleIn(initialScale = 0.98f, animationSpec = tween(220)))
+                                .togetherWith(fadeOut(tween(180)))
                         },
-                        onRenamePreset = { id, newName ->
-                            viewModel.renamePreset(id, newName)
-                            notify("프리셋 이름을 변경했습니다.")
-                        },
-                        onDeletePreset = { id ->
-                            viewModel.deletePreset(id)
-                            notify("프리셋을 삭제했습니다.")
-                        },
-                        onNotify = notify
-                    )
+                        label = "mainTabTransition"
+                    ) { tab ->
+                        when (tab) {
+                            0 -> HomeScreen(
+                                state = state,
+                                runtime = runtime,
+                                scrollBehavior = scrollBehavior,
+                                onLaunchMode = { mode -> handleLaunchOrToggleOverlay(mode) },
+                                onOpenAccessibilitySettings = { showAccessibilityGuide = true },
+                                onUpdateSingleConfig = viewModel::updateSingleConfig,
+                                onUpdateMultiConfig = { viewModel.updateMultiConfig(it, syncToTargets = true) },
+                                onAddTarget = { viewModel.addMultiTarget() },
+                                onUpdateTarget = viewModel::updateMultiTarget,
+                                onDeleteTarget = { id -> viewModel.removeMultiTargetById(id) },
+                                onSavePresetClick = { mode -> presetSaveMode = mode },
+                                onNotify = notify
+                            )
+                            1 -> PresetsScreen(
+                                state = state,
+                                scrollBehavior = scrollBehavior,
+                                onApplyPreset = { preset, launchImmediately ->
+                                    viewModel.applyPreset(preset)
+                                    if (launchImmediately) {
+                                        val ok = viewModel.startOverlay(preset.mode)
+                                        if (!ok) {
+                                            showAccessibilityGuide = true
+                                        } else {
+                                            notify("'${preset.name}' 프리셋으로 오버레이를 실행했습니다.")
+                                        }
+                                    } else {
+                                        selectedTab = 0
+                                        notify("'${preset.name}' 프리셋을 불러왔습니다.")
+                                    }
+                                },
+                                onRenamePreset = { id, newName ->
+                                    viewModel.renamePreset(id, newName)
+                                    notify("프리셋 이름을 변경했습니다.")
+                                },
+                                onDeletePreset = { id ->
+                                    viewModel.deletePreset(id)
+                                    notify("프리셋을 삭제했습니다.")
+                                },
+                                onSaveCurrentSingle = { presetSaveMode = ClickMode.SINGLE },
+                                onSaveCurrentMulti = { presetSaveMode = ClickMode.MULTI }
+                            )
+                            else -> TouchTestScreen(scrollBehavior = scrollBehavior)
+                        }
+                    }
                 }
             }
 
@@ -248,7 +280,18 @@ private fun MainTabsHost(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 20.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 92.dp)
+            )
+
+            FloatingLiquidGlassNavBar(
+                backdrop = barBackdrop,
+                selectedTab = selectedTab,
+                presetCount = state.presets.size,
+                onSelectTab = { selectedTab = it },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
             )
 
 

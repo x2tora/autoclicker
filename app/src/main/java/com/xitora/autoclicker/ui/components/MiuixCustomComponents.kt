@@ -162,10 +162,11 @@ fun TimeUnitValueRow(
     subtitle: String,
     value: Long,
     unit: TimeUnitOption,
-    quickPresets: List<Pair<Long, TimeUnitOption>>,
+    quickPresets: List<Long>,
     onChanged: (Long, TimeUnitOption) -> Unit
 ) {
-    var textValue by remember(value) { mutableStateOf(value.toString()) }
+    val valueMs = remember(value, unit) { ClickEngineCalculator.toMillis(value, unit) }
+    var textValue by remember(valueMs) { mutableStateOf(valueMs.toString()) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -189,7 +190,7 @@ fun TimeUnitValueRow(
                 )
             }
             SquirclePillBadge(
-                text = ClickEngineCalculator.formatTimingSummary(value, unit),
+                text = "${valueMs}ms",
                 backgroundColor = MiuixTheme.colorScheme.primary.copy(alpha = 0.13f),
                 contentColor = MiuixTheme.colorScheme.primary
             )
@@ -203,54 +204,41 @@ fun TimeUnitValueRow(
             TextField(
                 value = textValue,
                 onValueChange = { raw ->
-                    val filtered = raw.filter(Char::isDigit).take(8)
+                    val filtered = raw.filter(Char::isDigit).take(9)
                     textValue = filtered
                     val parsed = filtered.toLongOrNull()
                     if (parsed != null && parsed >= 1L) {
-                        onChanged(parsed, unit)
+                        onChanged(parsed, TimeUnitOption.MS)
                     }
                 },
-                label = "숫자 입력",
+                label = "밀리초(ms) 입력",
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
-                modifier = Modifier.weight(1.2f)
+                modifier = Modifier.weight(1f)
             )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .height(44.dp)
+                    .width(54.dp)
+                    .squircleBackground(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                        cornerRadius = 12.dp
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                TimeUnitOption.entries.forEach { opt ->
-                    val selected = opt == unit
-                    Box(
-                        modifier = Modifier
-                            .height(42.dp)
-                            .width(40.dp)
-                            .squircleBackground(
-                                color = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.secondaryContainer,
-                                cornerRadius = 11.dp
-                            )
-                            .squircleClip(11.dp)
-                            .clickable {
-                                val parsed = textValue.toLongOrNull()?.coerceAtLeast(1L) ?: value
-                                onChanged(parsed, opt)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = opt.symbol,
-                            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Bold),
-                            color = if (selected) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                }
+                Text(
+                    text = "ms",
+                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Bold),
+                    color = MiuixTheme.colorScheme.onSecondaryContainer
+                )
             }
         }
 
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(quickPresets) { (presetVal, presetUnit) ->
-                val active = value == presetVal && unit == presetUnit
+            items(quickPresets) { presetMs ->
+                val active = valueMs == presetMs
                 SquirclePillBadge(
-                    text = "${presetVal}${presetUnit.symbol}",
+                    text = "${presetMs}ms",
                     backgroundColor = if (active) {
                         MiuixTheme.colorScheme.primary.copy(alpha = 0.18f)
                     } else {
@@ -262,8 +250,8 @@ fun TimeUnitValueRow(
                         MiuixTheme.colorScheme.onSurfaceVariantSummary
                     },
                     onClick = {
-                        textValue = presetVal.toString()
-                        onChanged(presetVal, presetUnit)
+                        textValue = presetMs.toString()
+                        onChanged(presetMs, TimeUnitOption.MS)
                     }
                 )
             }
@@ -275,31 +263,15 @@ fun TimeUnitValueRow(
 fun ClickTimingEditorSection(
     config: ClickTimingConfig,
     showRepeatSection: Boolean,
+    reticleSizeDp: Int = 46,
     antiBotSubtitle: String = "선택한 영역 내 무작위 좌표로 클릭해 패턴 감지를 줄입니다",
     onConfigChange: (ClickTimingConfig) -> Unit
 ) {
-    val intervalPresets = remember {
-        listOf(
-            50L to TimeUnitOption.MS,
-            100L to TimeUnitOption.MS,
-            300L to TimeUnitOption.MS,
-            1L to TimeUnitOption.SEC,
-            5L to TimeUnitOption.SEC,
-            1L to TimeUnitOption.MIN
-        )
-    }
-    val durationPresets = remember {
-        listOf(
-            20L to TimeUnitOption.MS,
-            40L to TimeUnitOption.MS,
-            100L to TimeUnitOption.MS,
-            500L to TimeUnitOption.MS,
-            1L to TimeUnitOption.SEC
-        )
-    }
+    val intervalPresets = remember { listOf(50L, 100L, 300L, 1000L, 3000L) }
+    val durationPresets = remember { listOf(20L, 40L, 80L, 150L, 500L) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SmallTitle(text = "클릭 타이밍")
+        SmallTitle(text = "클릭 타이밍 (ms)")
         Card(
             modifier = Modifier.fillMaxWidth(),
             cornerRadius = 20.dp,
@@ -308,7 +280,7 @@ fun ClickTimingEditorSection(
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 TimeUnitValueRow(
                     title = "클릭 간격",
-                    subtitle = "클릭과 다음 클릭 사이의 대기 시간 (기본 단위: ms)",
+                    subtitle = "클릭과 다음 클릭 사이의 대기 시간 (ms)",
                     value = config.intervalValue,
                     unit = config.intervalUnit,
                     quickPresets = intervalPresets,
@@ -317,7 +289,7 @@ fun ClickTimingEditorSection(
                 HorizontalDivider()
                 TimeUnitValueRow(
                     title = "클릭 지속시간",
-                    subtitle = "화면을 누르고 유지하는 터치 길이 (기본 단위: ms)",
+                    subtitle = "화면을 누르고 유지하는 터치 길이 (ms)",
                     value = config.durationValue,
                     unit = config.durationUnit,
                     quickPresets = durationPresets,
@@ -355,16 +327,10 @@ fun ClickTimingEditorSection(
                         RepeatMode.DURATION -> {
                             TimeUnitValueRow(
                                 title = "지속 시간 설정",
-                                subtitle = "설정한 시간이 지나면 자동으로 클릭이 멈춥니다",
+                                subtitle = "설정한 시간(ms)이 지나면 자동으로 클릭이 멈춥니다",
                                 value = config.repeatDurationValue,
                                 unit = config.repeatDurationUnit,
-                                quickPresets = listOf(
-                                    30L to TimeUnitOption.SEC,
-                                    1L to TimeUnitOption.MIN,
-                                    5L to TimeUnitOption.MIN,
-                                    30L to TimeUnitOption.MIN,
-                                    1L to TimeUnitOption.HOUR
-                                ),
+                                quickPresets = listOf(10_000L, 30_000L, 60_000L, 300_000L, 600_000L),
                                 onChanged = { v, u ->
                                     onConfigChange(
                                         config.copy(
@@ -472,22 +438,31 @@ fun ClickTimingEditorSection(
                         valueRange = 8f..80f,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        TargetPreviewBadge(
-                            order = 1,
-                            antiBotEnabled = true,
-                            radiusDp = config.randomRadiusDp,
-                            modifier = Modifier.size(64.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(176.dp)
+                                .squircleBackground(MiuixTheme.colorScheme.surfaceContainerHigh, 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            TargetPreviewBadge(
+                                order = 1,
+                                antiBotEnabled = true,
+                                radiusDp = config.randomRadiusDp,
+                                reticleSizeDp = reticleSizeDp,
+                                exactScale = true,
+                                modifier = Modifier.size(172.dp)
+                            )
+                        }
                         Text(
-                            text = "화면 오버레이의 파란 점선 원 내부 어느 위치든 매 클릭마다 무작위로 터치됩니다.",
+                            text = "실제 화면과 동일한 1:1 비율입니다. 파란 점선 원 내부 어느 위치든 무작위로 터치됩니다.",
                             style = MiuixTheme.textStyles.footnote2,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            modifier = Modifier.weight(1f)
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
                 }
@@ -501,7 +476,9 @@ fun TargetPreviewBadge(
     order: Int,
     antiBotEnabled: Boolean,
     radiusDp: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reticleSizeDp: Int = 46,
+    exactScale: Boolean = false
 ) {
     val isDark = LocalIsDarkTheme.current
     val ringColor = if (isDark) Color(0xFFE2E8F0) else Color(0xFF2B2D30)
@@ -510,8 +487,12 @@ fun TargetPreviewBadge(
             val cx = size.width / 2f
             val cy = size.height / 2f
             if (antiBotEnabled) {
-                val maxR = size.minDimension * 0.46f
-                val previewR = ((radiusDp.coerceIn(8, 80) / 80f) * maxR).coerceAtLeast(size.minDimension * 0.22f)
+                val previewR = if (exactScale) {
+                    radiusDp.dp.toPx().coerceAtLeast(8.dp.toPx()).coerceAtMost(size.minDimension * 0.48f)
+                } else {
+                    val maxR = size.minDimension * 0.46f
+                    ((radiusDp.coerceIn(8, 80) / 80f) * maxR).coerceAtLeast(size.minDimension * 0.22f)
+                }
                 drawCircle(
                     color = Color(0xFF3A9BDC).copy(alpha = 0.14f),
                     radius = previewR,
@@ -522,21 +503,24 @@ fun TargetPreviewBadge(
                     radius = previewR,
                     center = Offset(cx, cy),
                     style = Stroke(
-                        width = 1.5.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                        width = if (exactScale) 1.8.dp.toPx() else 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(
+                            if (exactScale) floatArrayOf(5.dp.toPx(), 4.dp.toPx()) else floatArrayOf(8f, 6f),
+                            0f
+                        )
                     )
                 )
             }
-            val ringR = size.minDimension * 0.27f
-            val strokeW = 2.2.dp.toPx()
+            val ringR = if (exactScale) reticleSizeDp.dp.toPx() * 0.40f else size.minDimension * 0.27f
+            val strokeW = if (exactScale) 3.0.dp.toPx() else 2.2.dp.toPx()
             drawCircle(
                 color = ringColor,
                 radius = ringR,
                 center = Offset(cx, cy),
                 style = Stroke(width = strokeW)
             )
-            val tickOut = 3.5.dp.toPx()
-            val tickIn = 3.dp.toPx()
+            val tickOut = if (exactScale) 4.8.dp.toPx() else 3.5.dp.toPx()
+            val tickIn = if (exactScale) 4.2.dp.toPx() else 3.dp.toPx()
             drawLine(ringColor, Offset(cx, cy - ringR - tickOut), Offset(cx, cy - ringR + tickIn), strokeW, StrokeCap.Round)
             drawLine(ringColor, Offset(cx, cy + ringR - tickIn), Offset(cx, cy + ringR + tickOut), strokeW, StrokeCap.Round)
             drawLine(ringColor, Offset(cx - ringR - tickOut, cy), Offset(cx - ringR + tickIn, cy), strokeW, StrokeCap.Round)
@@ -544,7 +528,7 @@ fun TargetPreviewBadge(
         }
         Text(
             text = order.toString(),
-            fontSize = 13.sp,
+            fontSize = if (exactScale) (reticleSizeDp * 0.38f).sp else 13.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFFD94B64)
         )
@@ -679,28 +663,19 @@ fun TargetPointEditDialog(
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             TimeUnitValueRow(
                 title = "이 지점 대기 간격",
-                subtitle = "클릭 완료 후 다음 타겟까지 간격",
+                subtitle = "클릭 완료 후 다음 타겟까지 간격 (ms)",
                 value = editing.intervalValue,
                 unit = editing.intervalUnit,
-                quickPresets = listOf(
-                    50L to TimeUnitOption.MS,
-                    100L to TimeUnitOption.MS,
-                    500L to TimeUnitOption.MS,
-                    1L to TimeUnitOption.SEC
-                ),
+                quickPresets = listOf(50L, 100L, 500L, 1000L),
                 onChanged = { v, u -> editing = editing.copy(intervalValue = v, intervalUnit = u) }
             )
             HorizontalDivider()
             TimeUnitValueRow(
                 title = "클릭 지속시간",
-                subtitle = "이 지점을 누르고 있는 시간",
+                subtitle = "이 지점을 누르고 있는 시간 (ms)",
                 value = editing.durationValue,
                 unit = editing.durationUnit,
-                quickPresets = listOf(
-                    20L to TimeUnitOption.MS,
-                    40L to TimeUnitOption.MS,
-                    100L to TimeUnitOption.MS
-                ),
+                quickPresets = listOf(20L, 40L, 100L),
                 onChanged = { v, u -> editing = editing.copy(durationValue = v, durationUnit = u) }
             )
             HorizontalDivider()

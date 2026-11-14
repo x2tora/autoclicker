@@ -4,6 +4,7 @@ kotlin = "2.4.20"
 miuix = "0.9.4"
 activityCompose = "1.13.0"
 coreKtx = "1.16.0"
+coreSplashscreen = "1.0.1"
 lifecycle = "2.11.0"
 kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.10.2"
@@ -11,6 +12,7 @@ junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 
 jetbrains-lifecycle-runtime-compose = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
