@@ -8,10 +8,15 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import com.xitora.autoclicker.data.AutoClickerStateHolder
+import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.ClickMode
 import com.xitora.autoclicker.model.ClickTimingConfig
+import com.xitora.autoclicker.model.ScenarioStep
+import com.xitora.autoclicker.model.ScenarioStepType
+import com.xitora.autoclicker.model.ScrollDirection
 import com.xitora.autoclicker.model.TargetPoint
 import com.xitora.autoclicker.model.ThemeOption
+import com.xitora.autoclicker.model.TimeUnitOption
 import kotlin.math.roundToInt
 
 /**
@@ -103,13 +108,25 @@ class OverlayController(
             onSettingsClick = { openModeSettingsModal() },
             onAddTargetClick = {
                 val (sw, sh) = screenDimensions()
-                val existingCount = stateHolder.state.value.multiTargets.size
-                val spawnX = (sw * 0.5f + ((existingCount % 3) - 1) * 90f).coerceIn(100f, (sw - 100).toFloat())
-                val spawnY = (sh * 0.52f + ((existingCount / 3) % 3) * 90f).coerceIn(180f, (sh - 180).toFloat())
-                stateHolder.addMultiTarget(spawnX, spawnY)
+                val mode = stateHolder.runtime.value.activeMode
+                if (mode == ClickMode.SCENARIO) {
+                    val existingCount = stateHolder.state.value.scenarioSteps.size
+                    val spawnX = (sw * 0.5f + ((existingCount % 3) - 1) * 90f).coerceIn(100f, (sw - 100).toFloat())
+                    val spawnY = (sh * 0.52f + ((existingCount / 3) % 3) * 90f).coerceIn(180f, (sh - 180).toFloat())
+                    stateHolder.addScenarioStep(ScenarioStepType.SINGLE_TAP, spawnX, spawnY)
+                } else {
+                    val existingCount = stateHolder.state.value.multiTargets.size
+                    val spawnX = (sw * 0.5f + ((existingCount % 3) - 1) * 90f).coerceIn(100f, (sw - 100).toFloat())
+                    val spawnY = (sh * 0.52f + ((existingCount / 3) % 3) * 90f).coerceIn(180f, (sh - 180).toFloat())
+                    stateHolder.addMultiTarget(spawnX, spawnY)
+                }
             },
             onRemoveTargetClick = {
-                stateHolder.removeLastMultiTarget()
+                if (stateHolder.runtime.value.activeMode == ClickMode.SCENARIO) {
+                    stateHolder.removeLastScenarioStep()
+                } else {
+                    stateHolder.removeLastMultiTarget()
+                }
             },
             onToggleRunClick = onToggleRun,
             onPanelDrag = { dx, dy ->
@@ -148,9 +165,40 @@ class OverlayController(
         controlPanelParams = lp
     }
 
+    private data class RenderedReticleSpec(
+        val carrier: TargetPoint,
+        val badgeText: String? = null,
+        val scrollDirection: ScrollDirection? = null
+    )
+
+    private fun ScenarioStep.asTargetPointCarrier(): TargetPoint {
+        return TargetPoint(
+            id = id,
+            order = order,
+            xPx = xPx,
+            yPx = yPx,
+            intervalValue = postDelayMs,
+            intervalUnit = TimeUnitOption.MS,
+            durationValue = tapDurationMs,
+            durationUnit = TimeUnitOption.MS,
+            antiBotRandomEnabled = antiBotRandomEnabled,
+            randomRadiusDp = randomRadiusDp
+        )
+    }
+
     fun rebuildTargets(mode: ClickMode) {
         val data = stateHolder.state.value
-        val targets = if (mode == ClickMode.SINGLE) listOf(data.singleTarget) else data.multiTargets
+        val specs = when (mode) {
+            ClickMode.SINGLE -> listOf(RenderedReticleSpec(data.singleTarget))
+            ClickMode.MULTI -> data.multiTargets.map { RenderedReticleSpec(it) }
+            ClickMode.SCENARIO -> data.scenarioSteps.map { step ->
+                RenderedReticleSpec(
+                    carrier = step.asTargetPointCarrier(),
+                    badgeText = step.badgeText(),
+                    scrollDirection = step.scrollDirection.takeIf { step.type == ScenarioStepType.SCROLL }
+                )
+            }
+        }
         val isRunning = stateHolder.runtime.value.isClicking
 
         // Remove existing targets cleanly
@@ -164,13 +212,16 @@ class OverlayController(
         val opacity = data.settings.targetOpacityPercent
         val showZoneGuide = data.settings.showAntiBotZoneGuide
 
-        targets.forEach { target ->
+        specs.forEach { spec ->
+            val target = spec.carrier
             val reticleView = TargetReticleView(
                 context = serviceContext,
                 target = target,
                 reticleSizeDp = sizeDp,
                 opacityPercent = opacity,
                 showAntiBotZoneGuide = showZoneGuide,
+                customBadgeText = spec.badgeText,
+                scrollDirection = spec.scrollDirection,
                 onMoved = { pt, dx, dy ->
                     val holder = targetHolders.firstOrNull { it.targetId == pt.id } ?: return@TargetReticleView
                     val (sw, sh) = screenDimensions()
@@ -181,10 +232,10 @@ class OverlayController(
                     holder.params.x = (holder.centerXF - half).roundToInt()
                     holder.params.y = (holder.centerYF - half).roundToInt()
                     runCatching { windowManager.updateViewLayout(holder.view, holder.params) }
-                    if (stateHolder.runtime.value.activeMode == ClickMode.SINGLE) {
-                        stateHolder.updateSingleTargetPosition(holder.centerXF, holder.centerYF)
-                    } else {
-                        stateHolder.updateMultiTargetPosition(pt.id, holder.centerXF, holder.centerYF)
+                    when (stateHolder.runtime.value.activeMode) {
+                        ClickMode.SINGLE -> stateHolder.updateSingleTargetPosition(holder.centerXF, holder.centerYF)
+                        ClickMode.MULTI -> stateHolder.updateMultiTargetPosition(pt.id, holder.centerXF, holder.centerYF)
+                        ClickMode.SCENARIO -> stateHolder.updateScenarioStepPosition(pt.id, holder.centerXF, holder.centerYF)
                     }
                 },
                 onTap = { pt ->
@@ -252,12 +303,20 @@ class OverlayController(
         return target.xPx to target.yPx
     }
 
+    fun getScenarioStepScreenCenter(step: ScenarioStep): Pair<Float, Float> {
+        return getTargetScreenCenter(step.asTargetPointCarrier())
+    }
+
     fun screenBounds(): Pair<Int, Int> = screenDimensions()
 
     fun updateStatusReadout(completedCycles: Long) {
         val rt = stateHolder.runtime.value
         val data = stateHolder.state.value
-        val activeConfig = if (rt.activeMode == ClickMode.SINGLE) data.singleConfig else data.multiConfig
+        val activeConfig = when (rt.activeMode) {
+            ClickMode.SINGLE -> data.singleConfig
+            ClickMode.MULTI -> data.multiConfig
+            ClickMode.SCENARIO -> data.scenarioConfig
+        }
         controlPanelView?.updateState(
             mode = rt.activeMode,
             isRunning = rt.isClicking,
@@ -265,7 +324,9 @@ class OverlayController(
             clickCount = rt.clickCount,
             completedCycles = completedCycles,
             activeConfig = activeConfig,
-            isDarkSurface = isEffectiveDark()
+            isDarkSurface = isEffectiveDark(),
+            currentScenarioStepOrder = rt.currentScenarioStepOrder,
+            totalScenarioSteps = data.scenarioSteps.size
         )
     }
 
@@ -274,20 +335,34 @@ class OverlayController(
         dismissModal()
         val rt = stateHolder.runtime.value
         val data = stateHolder.state.value
-        val activeConfig = if (rt.activeMode == ClickMode.SINGLE) data.singleConfig else data.multiConfig
+        val activeConfig = when (rt.activeMode) {
+            ClickMode.SINGLE -> data.singleConfig
+            ClickMode.MULTI -> data.multiConfig
+            ClickMode.SCENARIO -> data.scenarioConfig
+        }
+        val title = when (rt.activeMode) {
+            ClickMode.SINGLE -> "단일 타겟 클릭 설정"
+            ClickMode.MULTI -> "다중 타겟 공통 설정"
+            ClickMode.SCENARIO -> "시나리오 전체 반복 설정"
+        }
+        val subtitle = if (rt.activeMode == ClickMode.SCENARIO) {
+            "단계별 상세 편집·이미지 업로드는 앱 내 시나리오 편집기에서 설정하세요."
+        } else {
+            "설정한 간격·지속시간·반복·봇 방지 옵션이 바로 적용됩니다."
+        }
         val modal = OverlayModalFactory.buildTimingModal(
             context = serviceContext,
-            title = if (rt.activeMode == ClickMode.SINGLE) "단일 타겟 클릭 설정" else "다중 타겟 공통 설정",
-            subtitle = "설정한 간격·지속시간·반복·봇 방지 옵션이 바로 적용됩니다.",
+            title = title,
+            subtitle = subtitle,
             initialConfig = activeConfig,
             showRepeatOptions = true,
             isDark = isEffectiveDark(),
             onCancel = { dismissModal() },
             onSave = { updated ->
-                if (rt.activeMode == ClickMode.SINGLE) {
-                    stateHolder.updateSingleConfig(updated)
-                } else {
-                    stateHolder.updateMultiConfig(updated, syncToTargets = true)
+                when (rt.activeMode) {
+                    ClickMode.SINGLE -> stateHolder.updateSingleConfig(updated)
+                    ClickMode.MULTI -> stateHolder.updateMultiConfig(updated, syncToTargets = true)
+                    ClickMode.SCENARIO -> stateHolder.updateScenarioConfig(updated)
                 }
                 dismissModal()
             }
@@ -299,6 +374,45 @@ class OverlayController(
         onPauseBeforeEdit()
         dismissModal()
         val rt = stateHolder.runtime.value
+        if (rt.activeMode == ClickMode.SCENARIO) {
+            val step = stateHolder.state.value.scenarioSteps.firstOrNull { it.id == target.id } ?: return
+            val initial = ClickTimingConfig(
+                intervalValue = step.postDelayMs,
+                intervalUnit = TimeUnitOption.MS,
+                durationValue = step.tapDurationMs,
+                durationUnit = TimeUnitOption.MS,
+                antiBotRandomEnabled = step.antiBotRandomEnabled,
+                randomRadiusDp = step.randomRadiusDp
+            )
+            val canDelete = stateHolder.state.value.scenarioSteps.size > 1
+            val modal = OverlayModalFactory.buildTimingModal(
+                context = serviceContext,
+                title = "#${step.order} ${step.title}",
+                subtitle = "클릭 간격란은 실행 후 다음 단계 대기(ms)로 적용됩니다. 감지/스크롤 상세 옵션은 앱에서 편집하세요.",
+                initialConfig = initial,
+                showRepeatOptions = false,
+                isDark = isEffectiveDark(),
+                showDeleteButton = canDelete,
+                onDelete = {
+                    stateHolder.removeScenarioStepById(step.id)
+                    dismissModal()
+                },
+                onCancel = { dismissModal() },
+                onSave = { updated ->
+                    stateHolder.updateScenarioStep(
+                        step.copy(
+                            postDelayMs = ClickEngineCalculator.toMillis(updated.intervalValue, updated.intervalUnit).coerceAtLeast(20L),
+                            tapDurationMs = ClickEngineCalculator.toMillis(updated.durationValue, updated.durationUnit).coerceIn(10L, 60_000L),
+                            antiBotRandomEnabled = updated.antiBotRandomEnabled,
+                            randomRadiusDp = updated.randomRadiusDp
+                        )
+                    )
+                    dismissModal()
+                }
+            )
+            showModalView(modal)
+            return
+        }
         val isSingleMode = rt.activeMode == ClickMode.SINGLE
         val initial = if (isSingleMode) {
             stateHolder.state.value.singleConfig

@@ -2,6 +2,8 @@ package com.xitora.autoclicker.domain
 
 import com.xitora.autoclicker.model.ClickTimingConfig
 import com.xitora.autoclicker.model.RepeatMode
+import com.xitora.autoclicker.model.ScenarioStep
+import com.xitora.autoclicker.model.ScrollDirection
 import com.xitora.autoclicker.model.TargetPoint
 import com.xitora.autoclicker.model.TimeUnitOption
 import java.util.Locale
@@ -129,5 +131,50 @@ object ClickEngineCalculator {
 
     fun reindexTargets(targets: List<TargetPoint>): List<TargetPoint> {
         return targets.mapIndexed { idx, point -> point.copy(order = idx + 1) }
+    }
+
+    fun reindexScenarioSteps(steps: List<ScenarioStep>): List<ScenarioStep> {
+        return steps.mapIndexed { idx, step -> step.copy(order = idx + 1) }
+    }
+
+    /**
+     * Computes swipe start and end coordinates centered on ([centerX], [centerY]).
+     * Note: scrolling down to reveal content below requires swiping the finger upward.
+     */
+    fun computeSwipePoints(
+        centerX: Float,
+        centerY: Float,
+        direction: ScrollDirection,
+        distancePx: Float,
+        screenWidth: Int,
+        screenHeight: Int
+    ): Pair<Pair<Float, Float>, Pair<Float, Float>> {
+        val safeMinX = 8f
+        val safeMaxX = (screenWidth - 8).coerceAtLeast(16).toFloat()
+        val safeMinY = 24f
+        val safeMaxY = (screenHeight - 24).coerceAtLeast(48).toFloat()
+        val half = distancePx.coerceAtLeast(40f) / 2f
+
+        val cx = centerX.coerceIn(safeMinX, safeMaxX)
+        val cy = centerY.coerceIn(safeMinY, safeMaxY)
+
+        val (startPair, endPair) = when (direction) {
+            ScrollDirection.DOWN -> (cx to (cy + half)) to (cx to (cy - half))
+            ScrollDirection.UP -> (cx to (cy - half)) to (cx to (cy + half))
+            ScrollDirection.LEFT -> ((cx + half) to cy) to ((cx - half) to cy)
+            ScrollDirection.RIGHT -> ((cx - half) to cy) to ((cx + half) to cy)
+        }
+        return (startPair.first.coerceIn(safeMinX, safeMaxX) to startPair.second.coerceIn(safeMinY, safeMaxY)) to
+            (endPair.first.coerceIn(safeMinX, safeMaxX) to endPair.second.coerceIn(safeMinY, safeMaxY))
+    }
+
+    fun matchesTargetText(candidateText: CharSequence?, query: String): Boolean {
+        if (candidateText.isNullOrBlank() || query.isBlank()) return false
+        val tokens = query.split('|')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        if (tokens.isEmpty()) return false
+        val haystack = candidateText.toString()
+        return tokens.any { token -> haystack.contains(token, ignoreCase = true) }
     }
 }

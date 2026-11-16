@@ -98,8 +98,16 @@ fun PresetsScreen(
             }
         } else {
             items(state.presets, key = { it.id }) { preset ->
-                val isMulti = preset.mode == ClickMode.MULTI
-                val accent = if (isMulti) Color(0xFF2B8A3E) else MiuixTheme.colorScheme.primary
+                val accent = when (preset.mode) {
+                    ClickMode.SINGLE -> MiuixTheme.colorScheme.primary
+                    ClickMode.MULTI -> Color(0xFF2B8A3E)
+                    ClickMode.SCENARIO -> Color(0xFF7C5CFF)
+                }
+                val icon = when (preset.mode) {
+                    ClickMode.SINGLE -> MiuixIcons.Location
+                    ClickMode.MULTI -> MiuixIcons.Layers
+                    ClickMode.SCENARIO -> MiuixIcons.Favorites
+                }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -114,7 +122,7 @@ fun PresetsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             MiuixGlassIcon(
-                                icon = if (isMulti) MiuixIcons.Layers else MiuixIcons.Location,
+                                icon = icon,
                                 contentDescription = null,
                                 accentColor = accent
                             )
@@ -127,10 +135,19 @@ fun PresetsScreen(
                                     style = MiuixTheme.textStyles.headline2.copy(fontWeight = FontWeight.SemiBold),
                                     color = MiuixTheme.colorScheme.onSurface
                                 )
-                                val modeText = if (isMulti) "다중 타겟 (${preset.targets.size}개)" else "단일 타겟"
+                                val modeText = when (preset.mode) {
+                                    ClickMode.SINGLE -> "단일 타겟"
+                                    ClickMode.MULTI -> "다중 타겟 (${preset.targets.size}개)"
+                                    ClickMode.SCENARIO -> "시나리오 (${preset.scenarioSteps.size}단계)"
+                                }
                                 val ivMs = ClickEngineCalculator.toMillis(preset.timing.intervalValue, preset.timing.intervalUnit)
+                                val summaryText = if (preset.mode == ClickMode.SCENARIO) {
+                                    "$modeText · ${ClickEngineCalculator.formatRepeatSummary(preset.timing)}"
+                                } else {
+                                    "$modeText · 간격 ${ivMs}ms · ${ClickEngineCalculator.formatRepeatSummary(preset.timing)}"
+                                }
                                 Text(
-                                    text = "$modeText · 간격 ${ivMs}ms · ${ClickEngineCalculator.formatRepeatSummary(preset.timing)}",
+                                    text = summaryText,
                                     style = MiuixTheme.textStyles.footnote2,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )

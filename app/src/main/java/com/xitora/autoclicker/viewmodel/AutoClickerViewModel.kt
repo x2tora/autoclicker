@@ -110,6 +110,19 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun updateMultiTarget(target: TargetPoint) = stateHolder.updateMultiTarget(target)
 
+    fun updateScenarioConfig(config: ClickTimingConfig) = stateHolder.updateScenarioConfig(config)
+
+    fun addScenarioStep(type: ScenarioStepType = ScenarioStepType.SINGLE_TAP) =
+        stateHolder.addScenarioStep(type)
+
+    fun updateScenarioStep(step: ScenarioStep) = stateHolder.updateScenarioStep(step)
+
+    fun removeScenarioStepById(stepId: String): Boolean = stateHolder.removeScenarioStepById(stepId)
+
+    fun moveScenarioStep(stepId: String, moveUp: Boolean) = stateHolder.moveScenarioStep(stepId, moveUp)
+
+    fun resetScenarioToDefault8Steps() = stateHolder.resetScenarioToDefault8Steps()
+
     fun savePreset(name: String, mode: ClickMode): ClickPreset = stateHolder.savePreset(name, mode)
 
     fun renamePreset(presetId: String, newName: String) = stateHolder.renamePreset(presetId, newName)

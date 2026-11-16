@@ -182,19 +182,25 @@ class AutoClickerStateHolder private constructor(context: Context) {
 
     fun savePreset(name: String, mode: ClickMode): ClickPreset {
         val current = _state.value
-        val preset = if (mode == ClickMode.SINGLE) {
-            ClickPreset(
+        val preset = when (mode) {
+            ClickMode.SINGLE -> ClickPreset(
                 name = name.trim().ifBlank { "단일 타겟 프리셋" },
                 mode = ClickMode.SINGLE,
                 timing = current.singleConfig,
                 targets = listOf(current.singleTarget)
             )
-        } else {
-            ClickPreset(
+            ClickMode.MULTI -> ClickPreset(
                 name = name.trim().ifBlank { "다중 타겟 프리셋 (${current.multiTargets.size}개)" },
                 mode = ClickMode.MULTI,
                 timing = current.multiConfig,
                 targets = current.multiTargets
+            )
+            ClickMode.SCENARIO -> ClickPreset(
+                name = name.trim().ifBlank { "시나리오 프리셋 (${current.scenarioSteps.size}단계)" },
+                mode = ClickMode.SCENARIO,
+                timing = current.scenarioConfig,
+                targets = emptyList(),
+                scenarioSteps = current.scenarioSteps
             )
         }
         commit { s ->
@@ -231,7 +237,115 @@ class AutoClickerStateHolder private constructor(context: Context) {
                         multiTargets = ClickEngineCalculator.reindexTargets(targets)
                     )
                 }
+                ClickMode.SCENARIO -> {
+                    val steps = preset.scenarioSteps.ifEmpty { defaultScenarioSteps() }
+                    s.copy(
+                        scenarioConfig = preset.timing,
+                        scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(steps)
+                    )
+                }
             }
+        }
+        AutoClickAccessibilityService.instance?.syncFromState()
+    }
+
+    fun updateScenarioConfig(config: ClickTimingConfig) {
+        commit { s -> s.copy(scenarioConfig = config) }
+        AutoClickAccessibilityService.instance?.syncFromState()
+    }
+
+    fun addScenarioStep(
+        type: ScenarioStepType = ScenarioStepType.SINGLE_TAP,
+        xPx: Float? = null,
+        yPx: Float? = null
+    ): ScenarioStep {
+        var added: ScenarioStep? = null
+        commit { s ->
+            val order = s.scenarioSteps.size + 1
+            val prev = s.scenarioSteps.lastOrNull()
+            val defaultX = xPx ?: ((prev?.xPx ?: 420f) + 60f).coerceAtMost(960f)
+            val defaultY = yPx ?: ((prev?.yPx ?: 980f) + 80f).coerceAtMost(1850f)
+            val step = ScenarioStep(
+                id = UUID.randomUUID().toString(),
+                order = order,
+                title = when (type) {
+                    ScenarioStepType.REPEAT_UNTIL_DETECT -> "반복 터치 · 감지 대기"
+                    ScenarioStepType.SINGLE_TAP -> "${order}번째 위치 클릭"
+                    ScenarioStepType.SCROLL -> "정해진 위치 스크롤"
+                },
+                type = type,
+                xPx = defaultX,
+                yPx = defaultY,
+                postDelayMs = if (type == ScenarioStepType.SCROLL) 600L else 450L
+            )
+            added = step
+            s.copy(scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(s.scenarioSteps + step))
+        }
+        AutoClickAccessibilityService.instance?.syncFromState()
+        return added!!
+    }
+
+    fun updateScenarioStep(step: ScenarioStep) {
+        commit { s ->
+            val updated = s.scenarioSteps.map { if (it.id == step.id) step else it }
+            s.copy(scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(updated))
+        }
+        AutoClickAccessibilityService.instance?.syncFromState()
+    }
+
+    fun updateScenarioStepPosition(stepId: String, xPx: Float, yPx: Float) {
+        commit { s ->
+            val updated = s.scenarioSteps.map {
+                if (it.id == stepId) it.copy(xPx = xPx, yPx = yPx) else it
+            }
+            s.copy(scenarioSteps = updated)
+        }
+    }
+
+    fun removeScenarioStepById(stepId: String): Boolean {
+        var removed = false
+        commit { s ->
+            if (s.scenarioSteps.size <= 1) return@commit s
+            val filtered = s.scenarioSteps.filterNot { it.id == stepId }
+            if (filtered.size == s.scenarioSteps.size) return@commit s
+            removed = true
+            s.copy(scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(filtered))
+        }
+        if (removed) AutoClickAccessibilityService.instance?.syncFromState()
+        return removed
+    }
+
+    fun removeLastScenarioStep(): Boolean {
+        var removed = false
+        commit { s ->
+            if (s.scenarioSteps.size <= 1) return@commit s
+            removed = true
+            s.copy(scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(s.scenarioSteps.dropLast(1)))
+        }
+        if (removed) AutoClickAccessibilityService.instance?.syncFromState()
+        return removed
+    }
+
+    fun moveScenarioStep(stepId: String, moveUp: Boolean) {
+        commit { s ->
+            val list = s.scenarioSteps.toMutableList()
+            val idx = list.indexOfFirst { it.id == stepId }
+            if (idx < 0) return@commit s
+            val swapIdx = if (moveUp) idx - 1 else idx + 1
+            if (swapIdx !in list.indices) return@commit s
+            val item = list.removeAt(idx)
+            list.add(swapIdx, item)
+            s.copy(scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(list))
+        }
+        AutoClickAccessibilityService.instance?.syncFromState()
+    }
+
+    fun resetScenarioToDefault8Steps() {
+        commit { s ->
+            s.copy(
+                scenarioConfig = ClickTimingConfig(),
+                scenarioSteps = defaultScenarioSteps()
+            )
         }
         AutoClickAccessibilityService.instance?.syncFromState()
     }
@@ -248,7 +362,9 @@ class AutoClickerStateHolder private constructor(context: Context) {
             _state.update {
                 val safeMulti = if (restored.multiTargets.isEmpty()) defaultMultiTargets()
                 else ClickEngineCalculator.reindexTargets(restored.multiTargets)
-                val normalized = restored.copy(multiTargets = safeMulti)
+                val safeScenario = if (restored.scenarioSteps.isEmpty()) defaultScenarioSteps()
+                else ClickEngineCalculator.reindexScenarioSteps(restored.scenarioSteps)
+                val normalized = restored.copy(multiTargets = safeMulti, scenarioSteps = safeScenario)
                 repository.saveState(normalized)
                 normalized
             }

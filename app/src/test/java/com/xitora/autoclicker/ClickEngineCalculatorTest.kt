@@ -2,6 +2,7 @@ package com.xitora.autoclicker
 
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.*
+import com.xitora.autoclicker.service.ScreenDetector
 import com.xitora.autoclicker.update.AppUpdater
 import com.xitora.autoclicker.update.ReleaseApkAsset
 import kotlinx.serialization.json.Json
@@ -153,5 +154,95 @@ class ClickEngineCalculatorTest {
         val (pickedFallback, fallbackLabel) = AppUpdater.selectBestApkAsset(assets, listOf("mips64"))!!
         assertEquals("autoclicker-v1.0.0-universal.apk", pickedFallback.name)
         assertEquals("universal", fallbackLabel)
+    }
+
+    @Test
+    fun `default 8 step scenario workflow and serialization round trip behave cleanly`() {
+        val steps = defaultScenarioSteps()
+        assertEquals(8, steps.size)
+        assertEquals(ScenarioStepType.REPEAT_UNTIL_DETECT, steps[0].type)
+        assertEquals("1🔄", steps[0].badgeText())
+        assertEquals(ScenarioStepType.SINGLE_TAP, steps[1].type)
+        assertEquals(ScenarioStepType.SINGLE_TAP, steps[2].type)
+        assertEquals(ScenarioStepType.SINGLE_TAP, steps[3].type)
+        assertEquals(ScenarioStepType.SCROLL, steps[4].type)
+        assertEquals("5↓", steps[4].badgeText())
+        assertEquals(ScenarioStepType.SINGLE_TAP, steps[5].type)
+        assertEquals(ScenarioStepType.SINGLE_TAP, steps[6].type)
+        assertEquals(ScenarioStepType.SINGLE_TAP, steps[7].type)
+
+        val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
+        val updatedSteps = steps.mapIndexed { idx, s ->
+            if (idx == 0) s.copy(targetText = "완료|확인", targetImagePath = "/tmp/tpl.png") else s
+        }
+        val state = AutoClickerDataState(
+            scenarioSteps = updatedSteps,
+            presets = listOf(
+                ClickPreset(
+                    id = "sc_p1",
+                    name = "시나리오 프리셋",
+                    mode = ClickMode.SCENARIO,
+                    timing = ClickTimingConfig(repeatMode = RepeatMode.COUNT, repeatCount = 10),
+                    targets = emptyList(),
+                    scenarioSteps = updatedSteps
+                )
+            )
+        )
+        val encoded = json.encodeToString(AutoClickerDataState.serializer(), state)
+        val decoded = json.decodeFromString(AutoClickerDataState.serializer(), encoded)
+        assertEquals(state, decoded)
+    }
+
+    @Test
+    fun `scroll swipe coordinates and text keyword matching stay accurate`() {
+        val (downStart, downEnd) = ClickEngineCalculator.computeSwipePoints(
+            centerX = 500f,
+            centerY = 1000f,
+            direction = ScrollDirection.DOWN,
+            distancePx = 400f,
+            screenWidth = 1080,
+            screenHeight = 2400
+        )
+        assertEquals(500f, downStart.first, 0.01f)
+        assertEquals(1200f, downStart.second, 0.01f)
+        assertEquals(500f, downEnd.first, 0.01f)
+        assertEquals(800f, downEnd.second, 0.01f)
+
+        val (upStart, upEnd) = ClickEngineCalculator.computeSwipePoints(
+            centerX = 500f,
+            centerY = 1000f,
+            direction = ScrollDirection.UP,
+            distancePx = 400f,
+            screenWidth = 1080,
+            screenHeight = 2400
+        )
+        assertTrue(upStart.second < upEnd.second)
+
+        assertTrue(ClickEngineCalculator.matchesTargetText("보상 획득 완료!", "완료 | 수령"))
+        assertFalse(ClickEngineCalculator.matchesTargetText("진행 중", "완료 | 수령"))
+    }
+
+    @Test
+    fun `template matcher detects exact patch and rejects mismatch`() {
+        val screenW = 40
+        val screenH = 40
+        val screen = IntArray(screenW * screenH) { 0xFF102030.toInt() }
+        val tplW = 10
+        val tplH = 10
+        val tpl = IntArray(tplW * tplH)
+        for (y in 0 until tplH) {
+            for (x in 0 until tplW) {
+                val color = (0xFF000000 or ((x * 25).toLong() shl 16) or ((y * 25).toLong() shl 8) or 180L).toInt()
+                tpl[y * tplW + x] = color
+                screen[(13 + y) * screenW + (17 + x)] = color
+            }
+        }
+        val exactScore = ScreenDetector.computeTemplateMatchScore(screen, screenW, screenH, tpl, tplW, tplH)
+        assertEquals(100, exactScore)
+
+        val darkScreen = IntArray(screenW * screenH) { 0xFF000000.toInt() }
+        val whiteTpl = IntArray(tplW * tplH) { 0xFFFFFFFF.toInt() }
+        val mismatchScore = ScreenDetector.computeTemplateMatchScore(darkScreen, screenW, screenH, whiteTpl, tplW, tplH)
+        assertTrue("Expected low mismatch score but got $mismatchScore", mismatchScore < 20)
     }
 }

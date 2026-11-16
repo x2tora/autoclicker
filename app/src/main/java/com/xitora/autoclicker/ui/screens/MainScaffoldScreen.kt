@@ -338,7 +338,22 @@ private fun MainTabsHost(
                                 onAddTarget = { viewModel.addMultiTarget() },
                                 onUpdateTarget = viewModel::updateMultiTarget,
                                 onDeleteTarget = { id -> viewModel.removeMultiTargetById(id) },
+                                onUpdateScenarioConfig = viewModel::updateScenarioConfig,
+                                onAddScenarioStep = { type -> viewModel.addScenarioStep(type) },
+                                onUpdateScenarioStep = viewModel::updateScenarioStep,
+                                onDeleteScenarioStep = { id -> viewModel.removeScenarioStepById(id) },
+                                onMoveScenarioStep = viewModel::moveScenarioStep,
+                                onResetScenarioSteps = viewModel::resetScenarioToDefault8Steps,
                                 onSavePresetClick = { mode -> presetSaveMode = mode },
+                                onLaunchPreset = { preset ->
+                                    viewModel.applyPreset(preset)
+                                    val ok = viewModel.startOverlay(preset.mode)
+                                    if (!ok) {
+                                        showAccessibilityGuide = true
+                                    } else {
+                                        notify("'${preset.name}' 프리셋으로 오버레이를 실행했습니다.")
+                                    }
+                                },
                                 onNavigateTab = selectTab,
                                 onNotify = notify
                             )
@@ -435,9 +450,11 @@ private fun MainTabsHost(
 
             val isSingleVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.SINGLE
             val isMultiVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.MULTI
+            val isScenarioVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.SCENARIO
             val quickMenuActions = remember(
                 isSingleVisible,
                 isMultiVisible,
+                isScenarioVisible,
                 runtime.isOverlayVisible,
                 runtime.isClicking,
                 runtime.activeMode
@@ -459,8 +476,18 @@ private fun MainTabsHost(
                             title = if (isMultiVisible) "다중 타겟 오버레이 닫기" else "다중 타겟 오버레이 실행",
                             subtitle = if (isMultiVisible) "화면의 다중 타겟 패널을 종료합니다" else "순서대로 여러 지점 자동 터치 실행",
                             icon = MiuixIcons.Layers,
-                            accentColor = Color(0xFF7C5CFF),
+                            accentColor = Color(0xFF2B8A3E),
                             onClick = { handleLaunchOrToggleOverlay(ClickMode.MULTI) }
+                        )
+                    )
+                    add(
+                        QuickMenuAction(
+                            id = "launch_scenario",
+                            title = if (isScenarioVisible) "시나리오 오버레이 닫기" else "시나리오 매크로 실행",
+                            subtitle = if (isScenarioVisible) "조건 감지 매크로 패널을 종료합니다" else "텍스트·이미지 감지 + 클릭/스크롤 루프",
+                            icon = MiuixIcons.Favorites,
+                            accentColor = Color(0xFF7C5CFF),
+                            onClick = { handleLaunchOrToggleOverlay(ClickMode.SCENARIO) }
                         )
                     )
                     if (runtime.isOverlayVisible) {
@@ -613,6 +640,8 @@ private fun PinnedHeaderLiveTicker(
         else -> Color(0xFFF59E0B)
     }
     val statusLabel = when {
+        runtime.isClicking && runtime.activeMode == ClickMode.SCENARIO ->
+            "시나리오 #${runtime.currentScenarioStepOrder} · ${ClickEngineCalculator.formatElapsedMmSs(runtime.elapsedMs)} · ${runtime.clickCount}회"
         runtime.isClicking ->
             "실행 중 · ${ClickEngineCalculator.formatElapsedMmSs(runtime.elapsedMs)} · ${runtime.clickCount}회"
         runtime.isOverlayVisible ->

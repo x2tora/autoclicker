@@ -1,5 +1,8 @@
 package com.xitora.autoclicker.ui.components
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
@@ -7,23 +10,30 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.*
+import com.xitora.autoclicker.service.ScreenDetector
 import com.xitora.autoclicker.ui.theme.LocalIsDarkTheme
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -629,7 +640,11 @@ fun SavePresetDialog(
 ) {
     var name by remember(show, mode) {
         mutableStateOf(
-            if (mode == ClickMode.SINGLE) "내 단일 클릭 프리셋" else "내 다중 클릭 프리셋"
+            when (mode) {
+                ClickMode.SINGLE -> "내 단일 클릭 프리셋"
+                ClickMode.MULTI -> "내 다중 클릭 프리셋"
+                ClickMode.SCENARIO -> "내 시나리오 매크로"
+            }
         )
     }
 
@@ -775,6 +790,373 @@ fun TargetPointEditDialog(
                                 randomRadiusDp = editing.randomRadiusDp
                             )
                         )
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ScenarioStepEditDialog(
+    step: ScenarioStep?,
+    canDelete: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (ScenarioStep) -> Unit,
+    onDelete: (String) -> Unit,
+    onFeedback: (String) -> Unit
+) {
+    if (step == null) return
+    val context = LocalContext.current
+    var editing by remember(step.id, step) { mutableStateOf(step) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val savedPath = ScreenDetector.saveTemplateImageFromUri(context, uri)
+            if (savedPath != null) {
+                editing = editing.copy(targetImagePath = savedPath)
+                onFeedback("감지용 이미지를 업로드했습니다.")
+            } else {
+                onFeedback("이미지를 불러올 수 없습니다. 다른 이미지를 선택해 주세요.")
+            }
+        }
+    }
+
+    val previewBitmap: ImageBitmap? = remember(editing.targetImagePath) {
+        val path = editing.targetImagePath ?: return@remember null
+        runCatching { BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull()
+    }
+
+    OverlayDialog(
+        show = true,
+        title = "단계 #${step.order} 상세 설정",
+        summary = "화면 좌표 (${step.xPx.roundToInt()}, ${step.yPx.roundToInt()}) · 오버레이에서 드래그로 이동",
+        onDismissRequest = onDismiss
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 430.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TextField(
+                    value = editing.title,
+                    onValueChange = { if (it.length <= 36) editing = editing.copy(title = it) },
+                    label = "단계 이름",
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "동작 유형",
+                        style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val typeLabels = listOf(
+                            ScenarioStepType.REPEAT_UNTIL_DETECT to "반복+감지",
+                            ScenarioStepType.SINGLE_TAP to "1회 클릭",
+                            ScenarioStepType.SCROLL to "스크롤"
+                        )
+                        typeLabels.forEach { (typeOpt, shortTitle) ->
+                            val selected = editing.type == typeOpt
+                            SquirclePillBadge(
+                                text = shortTitle,
+                                backgroundColor = if (selected) {
+                                    MiuixTheme.colorScheme.primary
+                                } else {
+                                    MiuixTheme.colorScheme.secondaryContainer
+                                },
+                                contentColor = if (selected) {
+                                    MiuixTheme.colorScheme.onPrimary
+                                } else {
+                                    MiuixTheme.colorScheme.onSecondaryContainer
+                                },
+                                onClick = { editing = editing.copy(type = typeOpt) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                when (editing.type) {
+                    ScenarioStepType.REPEAT_UNTIL_DETECT -> {
+                        HorizontalDivider()
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "반복 중단(다음 단계 전환) 감지 조건",
+                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold)
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(DetectionConditionType.entries) { cond ->
+                                    val selected = editing.conditionType == cond
+                                    SquirclePillBadge(
+                                        text = cond.label,
+                                        backgroundColor = if (selected) {
+                                            MiuixTheme.colorScheme.primary
+                                        } else {
+                                            MiuixTheme.colorScheme.secondaryContainer
+                                        },
+                                        contentColor = if (selected) {
+                                            MiuixTheme.colorScheme.onPrimary
+                                        } else {
+                                            MiuixTheme.colorScheme.onSecondaryContainer
+                                        },
+                                        onClick = { editing = editing.copy(conditionType = cond) }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (editing.conditionType != DetectionConditionType.IMAGE_ONLY) {
+                            TextField(
+                                value = editing.targetText,
+                                onValueChange = { if (it.length <= 120) editing = editing.copy(targetText = it) },
+                                label = "감지할 화면 텍스트 (복수 키워드는 | 구분)",
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        if (editing.conditionType != DetectionConditionType.TEXT_ONLY) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .squircleBackground(MiuixTheme.colorScheme.surfaceContainerHigh, 14.dp)
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "감지할 기준 이미지",
+                                        style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold)
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (editing.targetImagePath != null) {
+                                            SquirclePillBadge(
+                                                text = "제거",
+                                                backgroundColor = Color(0xFFD93025).copy(alpha = 0.14f),
+                                                contentColor = Color(0xFFD93025),
+                                                onClick = { editing = editing.copy(targetImagePath = null) }
+                                            )
+                                        }
+                                        SquirclePillBadge(
+                                            text = if (editing.targetImagePath == null) "이미지 업로드" else "변경",
+                                            backgroundColor = MiuixTheme.colorScheme.primary,
+                                            contentColor = MiuixTheme.colorScheme.onPrimary,
+                                            onClick = { imagePickerLauncher.launch("image/*") }
+                                        )
+                                    }
+                                }
+
+                                if (previewBitmap != null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Image(
+                                            bitmap = previewBitmap,
+                                            contentDescription = "업로드된 감지 이미지",
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier
+                                                .size(56.dp)
+                                                .squircleClip(10.dp)
+                                                .background(Color.Black.copy(alpha = 0.08f))
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "유사도 임계값: ${editing.imageSimilarityPercent}%",
+                                                style = MiuixTheme.textStyles.footnote1.copy(
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontFeatureSettings = "tnum"
+                                                )
+                                            )
+                                            Slider(
+                                                value = editing.imageSimilarityPercent.toFloat(),
+                                                onValueChange = {
+                                                    editing = editing.copy(
+                                                        imageSimilarityPercent = it.roundToInt().coerceIn(65, 98)
+                                                    )
+                                                },
+                                                valueRange = 65f..98f,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Text(
+                                        text = "잘라낸 버튼·문구 스크린샷을 올리면 Android 11+에서 자동 인식합니다.",
+                                        style = MiuixTheme.textStyles.footnote2,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    )
+                                }
+                            }
+                        }
+
+                        TimeUnitValueRow(
+                            title = "반복 클릭 간격",
+                            subtitle = "감지되기 전까지 반복 터치하는 주기 (ms)",
+                            value = editing.repeatIntervalMs,
+                            unit = TimeUnitOption.MS,
+                            quickPresets = listOf(60L, 120L, 250L, 500L),
+                            onChanged = { v, _ -> editing = editing.copy(repeatIntervalMs = v.coerceAtLeast(20L)) }
+                        )
+                        TimeUnitValueRow(
+                            title = "화면 감지 확인 주기",
+                            subtitle = "텍스트/이미지 조건을 확인하는 간격 (ms)",
+                            value = editing.detectCheckIntervalMs,
+                            unit = TimeUnitOption.MS,
+                            quickPresets = listOf(250L, 450L, 800L, 1200L),
+                            onChanged = { v, _ -> editing = editing.copy(detectCheckIntervalMs = v.coerceAtLeast(200L)) }
+                        )
+                    }
+                    ScenarioStepType.SINGLE_TAP -> {
+                        HorizontalDivider()
+                        TimeUnitValueRow(
+                            title = "클릭 지속시간",
+                            subtitle = "이 위치를 누르고 있는 시간 (ms)",
+                            value = editing.tapDurationMs,
+                            unit = TimeUnitOption.MS,
+                            quickPresets = listOf(20L, 40L, 100L),
+                            onChanged = { v, _ -> editing = editing.copy(tapDurationMs = v.coerceIn(10L, 60_000L)) }
+                        )
+                    }
+                    ScenarioStepType.SCROLL -> {
+                        HorizontalDivider()
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "스크롤 방향",
+                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold)
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(ScrollDirection.entries) { dir ->
+                                    val selected = editing.scrollDirection == dir
+                                    val shortDir = when (dir) {
+                                        ScrollDirection.DOWN -> "↓ 아래로 내리기"
+                                        ScrollDirection.UP -> "↑ 위로 올리기"
+                                        ScrollDirection.LEFT -> "← 왼쪽"
+                                        ScrollDirection.RIGHT -> "→ 오른쪽"
+                                    }
+                                    SquirclePillBadge(
+                                        text = shortDir,
+                                        backgroundColor = if (selected) {
+                                            MiuixTheme.colorScheme.primary
+                                        } else {
+                                            MiuixTheme.colorScheme.secondaryContainer
+                                        },
+                                        contentColor = if (selected) {
+                                            MiuixTheme.colorScheme.onPrimary
+                                        } else {
+                                            MiuixTheme.colorScheme.onSecondaryContainer
+                                        },
+                                        onClick = { editing = editing.copy(scrollDirection = dir) }
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = "스크롤 이동 거리: ${editing.scrollDistanceDp}dp",
+                            style = MiuixTheme.textStyles.body2.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontFeatureSettings = "tnum"
+                            )
+                        )
+                        Slider(
+                            value = editing.scrollDistanceDp.toFloat(),
+                            onValueChange = { editing = editing.copy(scrollDistanceDp = it.roundToInt().coerceIn(100, 900)) },
+                            valueRange = 100f..900f,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        TimeUnitValueRow(
+                            title = "스크롤 소요 시간",
+                            subtitle = "짧을수록 빠르게 튕기듯 스크롤됩니다 (ms)",
+                            value = editing.scrollDurationMs,
+                            unit = TimeUnitOption.MS,
+                            quickPresets = listOf(220L, 360L, 600L),
+                            onChanged = { v, _ -> editing = editing.copy(scrollDurationMs = v.coerceIn(80L, 5_000L)) }
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+                TimeUnitValueRow(
+                    title = "실행 후 다음 단계 대기",
+                    subtitle = "화면 전환을 기다리는 여유 시간 (ms)",
+                    value = editing.postDelayMs,
+                    unit = TimeUnitOption.MS,
+                    quickPresets = listOf(200L, 450L, 800L, 1500L),
+                    onChanged = { v, _ -> editing = editing.copy(postDelayMs = v.coerceAtLeast(20L)) }
+                )
+
+                if (editing.type != ScenarioStepType.SCROLL) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("봇 방지 랜덤 터치", style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold))
+                            Text(
+                                if (editing.antiBotRandomEnabled) "반경 ${editing.randomRadiusDp}dp 내 랜덤" else "정확한 중심 좌표",
+                                style = MiuixTheme.textStyles.footnote2,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            )
+                        }
+                        Switch(
+                            checked = editing.antiBotRandomEnabled,
+                            onCheckedChange = { editing = editing.copy(antiBotRandomEnabled = it) }
+                        )
+                    }
+                    AnimatedVisibility(visible = editing.antiBotRandomEnabled) {
+                        Slider(
+                            value = editing.randomRadiusDp.toFloat(),
+                            onValueChange = { editing = editing.copy(randomRadiusDp = it.roundToInt().coerceIn(8, 80)) },
+                            valueRange = 8f..80f,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                if (canDelete) {
+                    TextButton(
+                        text = "이 단계 삭제",
+                        onClick = {
+                            onDelete(step.id)
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            color = MiuixTheme.colorScheme.error,
+                            textColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TextButton(text = "취소", onClick = onDismiss, modifier = Modifier.weight(1f))
+                TextButton(
+                    text = "적용",
+                    onClick = {
+                        onSave(editing.copy(title = editing.title.trim().ifEmpty { step.title }))
                         onDismiss()
                     },
                     colors = ButtonDefaults.textButtonColorsPrimary(),

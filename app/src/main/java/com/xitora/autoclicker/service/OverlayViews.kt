@@ -37,6 +37,8 @@ class TargetReticleView(
     var reticleSizeDp: Int,
     var opacityPercent: Int,
     var showAntiBotZoneGuide: Boolean,
+    var customBadgeText: String? = null,
+    var scrollDirection: ScrollDirection? = null,
     private val onMoved: (TargetPoint, Float, Float) -> Unit,
     private val onTap: (TargetPoint) -> Unit
 ) : View(context) {
@@ -76,6 +78,14 @@ class TargetReticleView(
         pathEffect = DashPathEffect(floatArrayOf(context.dpToPx(5f), context.dpToPx(4f)), 0f)
     }
 
+    private val scrollArrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        strokeWidth = context.dpToPx(2.8f)
+        color = Color.parseColor("#0284C7")
+    }
+
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private var downRawX = 0f
     private var downRawY = 0f
@@ -83,7 +93,7 @@ class TargetReticleView(
 
     fun requiredWindowSizePx(): Int {
         val reticlePx = context.dpToPx(reticleSizeDp.toFloat())
-        val tickOverflow = context.dpToPx(12f)
+        val tickOverflow = context.dpToPx(if (scrollDirection != null) 22f else 12f)
         val baseSize = reticlePx + tickOverflow
         val antiBotSize = if (target.antiBotRandomEnabled && showAntiBotZoneGuide) {
             context.dpToPx(target.randomRadiusDp.toFloat()) * 2f + context.dpToPx(10f)
@@ -137,11 +147,47 @@ class TargetReticleView(
         // Right
         canvas.drawLine(cx + ringRadius - innerTick, cy, cx + ringRadius + outerTick, cy, ringPaint)
 
-        // Centered target index label
-        textPaint.textSize = context.dpToPx(reticleSizeDp * 0.38f)
+        // Centered target index or scenario badge label
+        val badgeLabel = customBadgeText ?: target.order.toString()
+        val fontFactor = when {
+            badgeLabel.length >= 3 -> 0.25f
+            badgeLabel.length == 2 -> 0.30f
+            else -> 0.38f
+        }
+        textPaint.textSize = context.dpToPx(reticleSizeDp * fontFactor)
         val fm = textPaint.fontMetrics
         val textY = cy - (fm.ascent + fm.descent) / 2f
-        canvas.drawText(target.order.toString(), cx, textY, textPaint)
+        canvas.drawText(badgeLabel, cx, textY, textPaint)
+
+        // Directional scroll arrow indicator outside the reticle ring
+        scrollDirection?.let { dir ->
+            scrollArrowPaint.alpha = (230 * alphaFactor).roundToInt()
+            val head = context.dpToPx(5f)
+            val edge = ringRadius + context.dpToPx(4f)
+            val tip = ringRadius + context.dpToPx(12f)
+            when (dir) {
+                ScrollDirection.DOWN -> {
+                    canvas.drawLine(cx, cy + edge, cx, cy + tip, scrollArrowPaint)
+                    canvas.drawLine(cx - head, cy + tip - head, cx, cy + tip, scrollArrowPaint)
+                    canvas.drawLine(cx + head, cy + tip - head, cx, cy + tip, scrollArrowPaint)
+                }
+                ScrollDirection.UP -> {
+                    canvas.drawLine(cx, cy - edge, cx, cy - tip, scrollArrowPaint)
+                    canvas.drawLine(cx - head, cy - tip + head, cx, cy - tip, scrollArrowPaint)
+                    canvas.drawLine(cx + head, cy - tip + head, cx, cy - tip, scrollArrowPaint)
+                }
+                ScrollDirection.LEFT -> {
+                    canvas.drawLine(cx - edge, cy, cx - tip, cy, scrollArrowPaint)
+                    canvas.drawLine(cx - tip + head, cy - head, cx - tip, cy, scrollArrowPaint)
+                    canvas.drawLine(cx - tip + head, cy + head, cx - tip, cy, scrollArrowPaint)
+                }
+                ScrollDirection.RIGHT -> {
+                    canvas.drawLine(cx + edge, cy, cx + tip, cy, scrollArrowPaint)
+                    canvas.drawLine(cx + tip - head, cy - head, cx + tip, cy, scrollArrowPaint)
+                    canvas.drawLine(cx + tip - head, cy + head, cx + tip, cy, scrollArrowPaint)
+                }
+            }
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -313,9 +359,11 @@ class FloatingControlPanelView(
         clickCount: Long,
         completedCycles: Long,
         activeConfig: ClickTimingConfig,
-        isDarkSurface: Boolean
+        isDarkSurface: Boolean,
+        currentScenarioStepOrder: Int = 1,
+        totalScenarioSteps: Int = 0
     ) {
-        val showMultiControls = mode == ClickMode.MULTI
+        val showMultiControls = mode == ClickMode.MULTI || mode == ClickMode.SCENARIO
         addBtn.visibility = if (showMultiControls) VISIBLE else GONE
         removeBtn.visibility = if (showMultiControls) VISIBLE else GONE
         addBtn.isEnabled = !isRunning
@@ -327,11 +375,15 @@ class FloatingControlPanelView(
 
         playPauseBtn.isRunning = isRunning
         elapsedLabel.text = ClickEngineCalculator.formatElapsedMmSs(elapsedMs)
-        repeatLabel.text = ClickEngineCalculator.formatRepeatStatusBadge(
-            config = activeConfig,
-            elapsedMs = elapsedMs,
-            completedCycles = completedCycles
-        )
+        repeatLabel.text = if (mode == ClickMode.SCENARIO && isRunning && totalScenarioSteps > 0) {
+            "#${currentScenarioStepOrder}/$totalScenarioSteps"
+        } else {
+            ClickEngineCalculator.formatRepeatStatusBadge(
+                config = activeConfig,
+                elapsedMs = elapsedMs,
+                completedCycles = completedCycles
+            )
+        }
         countLabel.text = clickCount.toString()
 
         val bg = background as? GradientDrawable

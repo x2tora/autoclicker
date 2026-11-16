@@ -12,8 +12,8 @@ android {
         applicationId = "com.xitora.autoclicker"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.1.0"
+        versionCode = 8
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
