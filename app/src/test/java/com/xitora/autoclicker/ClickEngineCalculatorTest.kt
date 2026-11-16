@@ -1,6 +1,7 @@
 package com.xitora.autoclicker
 
 import com.xitora.autoclicker.domain.ClickEngineCalculator
+import com.xitora.autoclicker.domain.ScenarioDetectGuard
 import com.xitora.autoclicker.model.*
 import com.xitora.autoclicker.service.ScreenDetector
 import com.xitora.autoclicker.update.AppUpdater
@@ -249,5 +250,21 @@ class ClickEngineCalculatorTest {
         val whiteTpl = IntArray(tplW * tplH) { 0xFFFFFFFF.toInt() }
         val mismatchScore = ScreenDetector.computeTemplateMatchScore(darkScreen, screenW, screenH, whiteTpl, tplW, tplH)
         assertTrue("Expected low mismatch score but got $mismatchScore", mismatchScore < 20)
+    }
+
+    @Test
+    fun `scenario detect guard ignores stale condition until absent then triggers on reappearance`() {
+        val guard = ScenarioDetectGuard()
+        // Even if condition is still present right as cycle 2 starts, do not fire before seeing absent
+        assertFalse(guard.onConditionEvaluated(isPresent = true, tapsInStep = 0))
+        assertFalse(guard.onConditionEvaluated(isPresent = true, tapsInStep = 1))
+        assertFalse(guard.seenAbsent)
+
+        // Old popup/text disappears
+        assertFalse(guard.onConditionEvaluated(isPresent = false, tapsInStep = 2))
+        assertTrue(guard.seenAbsent)
+
+        // New text appears after tapping -> triggers stop of repeat-tap step
+        assertTrue(guard.onConditionEvaluated(isPresent = true, tapsInStep = 3))
     }
 }

@@ -8,6 +8,7 @@ import android.util.TypedValue
 import android.view.accessibility.AccessibilityEvent
 import com.xitora.autoclicker.data.AutoClickerStateHolder
 import com.xitora.autoclicker.domain.ClickEngineCalculator
+import com.xitora.autoclicker.domain.ScenarioDetectGuard
 import com.xitora.autoclicker.model.ClickMode
 import com.xitora.autoclicker.model.DetectionConditionType
 import com.xitora.autoclicker.model.ScenarioStep
@@ -288,20 +289,24 @@ class AutoClickAccessibilityService : AccessibilityService() {
                                         )
                                         return@launch
                                     }
-                                    var lastCondCheckMs = 0L
+                                    var lastCondCheckMs = SystemClock.elapsedRealtime()
                                     var lastScreenshotCheckMs = 0L
+                                    var tapsInStep = 0
+                                    val detectGuard = ScenarioDetectGuard()
                                     val detectPollMs = liveStep.detectCheckIntervalMs.coerceAtLeast(200L)
                                     val repeatDelayMs = liveStep.repeatIntervalMs.coerceAtLeast(20L)
                                     val tapMs = liveStep.tapDurationMs.coerceIn(10L, 60_000L)
 
                                     while (isActive && stateHolder.runtime.value.isClicking) {
                                         val nowMs = SystemClock.elapsedRealtime()
-                                        if (nowMs - lastCondCheckMs >= detectPollMs) {
+                                        if (tapsInStep >= 1 && nowMs - lastCondCheckMs >= detectPollMs) {
                                             lastCondCheckMs = nowMs
                                             var detected = false
+                                            var evaluated = false
                                             if (liveStep.conditionType != DetectionConditionType.IMAGE_ONLY &&
                                                 liveStep.targetText.isNotBlank()
                                             ) {
+                                                evaluated = true
                                                 detected = ScreenDetector.detectTextInService(
                                                     service = this@AutoClickAccessibilityService,
                                                     query = liveStep.targetText
@@ -312,6 +317,7 @@ class AutoClickAccessibilityService : AccessibilityService() {
                                                 !liveStep.targetImagePath.isNullOrBlank() &&
                                                 nowMs - lastScreenshotCheckMs >= 1100L
                                             ) {
+                                                evaluated = true
                                                 lastScreenshotCheckMs = nowMs
                                                 detected = ScreenDetector.detectImageInService(
                                                     service = this@AutoClickAccessibilityService,
@@ -319,7 +325,8 @@ class AutoClickAccessibilityService : AccessibilityService() {
                                                     similarityPercent = liveStep.imageSimilarityPercent
                                                 )
                                             }
-                                            if (detected) {
+                                            if (!isActive || !stateHolder.runtime.value.isClicking) break
+                                            if (evaluated && detectGuard.onConditionEvaluated(detected, tapsInStep)) {
                                                 delay(liveStep.postDelayMs.coerceAtLeast(20L))
                                                 break
                                             }
@@ -336,6 +343,7 @@ class AutoClickAccessibilityService : AccessibilityService() {
                                         performTapGesture(tapX, tapY, tapMs)
                                         if (!stateHolder.runtime.value.isClicking) break
 
+                                        tapsInStep++
                                         val loopElapsed = SystemClock.elapsedRealtime() - startRealtime
                                         stateHolder.updateRuntime {
                                             it.copy(clickCount = it.clickCount + 1L, elapsedMs = loopElapsed)

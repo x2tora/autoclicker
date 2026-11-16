@@ -61,18 +61,24 @@ object ScreenDetector {
 
     private fun collectTargetAppRoots(service: AccessibilityService): List<AccessibilityNodeInfo> {
         val ownPackage = service.packageName
-        val roots = mutableListOf<AccessibilityNodeInfo>()
+        val activeRoots = mutableListOf<AccessibilityNodeInfo>()
+        val fallbackRoots = mutableListOf<AccessibilityNodeInfo>()
 
         runCatching {
             service.windows?.forEach { window ->
                 if (window.type != AccessibilityWindowInfo.TYPE_APPLICATION) return@forEach
                 val root = window.root ?: return@forEach
                 if (root.packageName?.toString() != ownPackage) {
-                    roots.add(root)
+                    if (window.isActive || window.isFocused) {
+                        activeRoots.add(root)
+                    } else {
+                        fallbackRoots.add(root)
+                    }
                 }
             }
         }
 
+        val roots = if (activeRoots.isNotEmpty()) activeRoots else fallbackRoots
         if (roots.isEmpty()) {
             runCatching {
                 service.rootInActiveWindow?.let { activeRoot ->

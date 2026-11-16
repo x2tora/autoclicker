@@ -178,3 +178,21 @@ object ClickEngineCalculator {
         return tokens.any { token -> haystack.contains(token, ignoreCase = true) }
     }
 }
+
+/**
+ * Edge-triggered detection guard for [com.xitora.autoclicker.model.ScenarioStepType.REPEAT_UNTIL_DETECT].
+ * Requires at least one tap and at least one absent observation before firing so stale text/images
+ * lingering from the end of the previous cycle never skip the infinite-tap step.
+ */
+class ScenarioDetectGuard {
+    var seenAbsent: Boolean = false
+        private set
+
+    fun onConditionEvaluated(isPresent: Boolean, tapsInStep: Int): Boolean {
+        if (!isPresent) {
+            seenAbsent = true
+            return false
+        }
+        return seenAbsent && tapsInStep >= 1
+    }
+}

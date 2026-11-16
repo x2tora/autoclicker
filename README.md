@@ -48,11 +48,11 @@
 
 | ABI | 다운로드 파일 | 권장 대상 |
 | --- | --- | --- |
-| `arm64-v8a` | `autoclicker-v2.0.2-arm64-v8a.apk` | 대부분의 최신 64비트 안드로이드 스마트폰 **(추천)** |
-| `armeabi-v7a` | `autoclicker-v2.0.2-armeabi-v7a.apk` | 구형 32비트 안드로이드 기기 |
-| `x86` | `autoclicker-v2.0.2-x86.apk` | 32비트 x86 태블릿 및 에뮬레이터 |
-| `x86_64` | `autoclicker-v2.0.2-x86_64.apk` | 64비트 x86 태블릿 · 크롬북 · 에뮬레이터 |
-| `universal` | `autoclicker-v2.0.2-universal.apk` | 기기 호환성을 구분하기 어려울 때 선택하는 통합본 |
+| `arm64-v8a` | `autoclicker-v2.1.0-arm64-v8a.apk` | 대부분의 최신 64비트 안드로이드 스마트폰 **(추천)** |
+| `armeabi-v7a` | `autoclicker-v2.1.0-armeabi-v7a.apk` | 구형 32비트 안드로이드 기기 |
+| `x86` | `autoclicker-v2.1.0-x86.apk` | 32비트 x86 태블릿 및 에뮬레이터 |
+| `x86_64` | `autoclicker-v2.1.0-x86_64.apk` | 64비트 x86 태블릿 · 크롬북 · 에뮬레이터 |
+| `universal` | `autoclicker-v2.1.0-universal.apk` | 기기 호환성을 구분하기 어려울 때 선택하는 통합본 |
 
 2. 설치 중 **"출처를 알 수 없는 앱 설치 허용"** 안내가 표시되면 허용을 눌러 설치를 완료합니다.
 
