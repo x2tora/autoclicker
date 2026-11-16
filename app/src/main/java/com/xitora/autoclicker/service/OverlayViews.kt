@@ -1324,10 +1324,14 @@ object OverlayModalFactory {
             private var curY = 0f
             private var isDraggingBox = false
             private val slop = ViewConfiguration.get(context).scaledTouchSlop
+            private val winLoc = IntArray(2)
 
             override fun onDraw(canvas: Canvas) {
                 super.onDraw(canvas)
                 canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dimPaint)
+                getLocationOnScreen(winLoc)
+                canvas.save()
+                canvas.translate(-winLoc[0].toFloat(), -winLoc[1].toFloat())
                 val rCorner = context.dpToPx(6f)
                 candidates.forEach { cand ->
                     val rf = RectF(cand.bounds)
@@ -1339,6 +1343,7 @@ object OverlayModalFactory {
                     canvas.drawRoundRect(rf, rCorner, rCorner, selectedFill)
                     canvas.drawRoundRect(rf, rCorner, rCorner, selectedStroke)
                 }
+                canvas.restore()
             }
 
             @SuppressLint("ClickableViewAccessibility")
@@ -1436,7 +1441,11 @@ object OverlayModalFactory {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         })
         bottomCard.addView(TextView(context).apply {
-            text = "화면의 파란 글자 박스를 터치하거나 영역을 드래그해 선택하세요."
+            text = if (candidates.isNotEmpty()) {
+                "화면의 파란 글자 박스를 터치하거나 영역을 드래그해 선택하세요."
+            } else {
+                "이 화면에서 글자 정보를 찾지 못했습니다. 영역을 드래그해 이미지로 저장하거나 아래에 글자를 직접 입력하세요."
+            }
             setTextColor(textSecondary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(8f))

@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.DetectionConditionType
 import com.xitora.autoclicker.model.ScenarioStep
@@ -30,7 +31,7 @@ import kotlin.math.roundToInt
  * for conditional Scenario steps.
  */
 object ScreenDetector {
-    private const val MAX_TRAVERSED_NODES = 600
+    private const val MAX_TRAVERSED_NODES = 1500
     private const val MAX_SAVED_IMAGE_DIM = 1080
     private const val MATCH_SCALE = 0.35f
 
@@ -58,16 +59,13 @@ object ScreenDetector {
         }
     }
 
-    /**
-     * Collects all visible text nodes and their screen bounding rectangles from the underlying app window
-     * so the user can tap or drag over a region on screen to select the text to detect.
-     */
-    fun collectScreenTextCandidates(service: AccessibilityService): List<ScreenTextCandidate> {
+    private fun collectTargetAppRoots(service: AccessibilityService): List<AccessibilityNodeInfo> {
         val ownPackage = service.packageName
         val roots = mutableListOf<AccessibilityNodeInfo>()
 
         runCatching {
             service.windows?.forEach { window ->
+                if (window.type != AccessibilityWindowInfo.TYPE_APPLICATION) return@forEach
                 val root = window.root ?: return@forEach
                 if (root.packageName?.toString() != ownPackage) {
                     roots.add(root)
@@ -84,6 +82,18 @@ object ScreenDetector {
                 }
             }
         }
+        return roots
+    }
+
+    /**
+     * Collects visible leaf/text nodes and their screen bounding rectangles from the target app window
+     * (excluding full-window containers and system bars) so the user can tap or drag to select text.
+     */
+    fun collectScreenTextCandidates(service: AccessibilityService): List<ScreenTextCandidate> {
+        val roots = collectTargetAppRoots(service)
+        val dm = service.resources.displayMetrics
+        val screenArea = (dm.widthPixels.toLong() * dm.heightPixels.toLong()).coerceAtLeast(1L)
+        val maxCandidateArea = (screenArea * 0.28).toLong()
 
         val queue = ArrayDeque<AccessibilityNodeInfo>(roots)
         val results = mutableListOf<ScreenTextCandidate>()
@@ -94,14 +104,21 @@ object ScreenDetector {
             val node = queue.removeFirst()
             visited++
 
+            val childCount = runCatching { node.childCount }.getOrDefault(0)
             runCatching {
                 if (node.isVisibleToUser) {
-                    val rawText = node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    val directText = node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    val leafDesc = if (childCount == 0) {
+                        node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    } else {
+                        null
+                    }
+                    val rawText = directText ?: leafDesc
                     if (rawText != null && rawText.length <= 80) {
                         val rect = Rect()
                         node.getBoundsInScreen(rect)
-                        if (rect.width() > 10 && rect.height() > 10) {
+                        val area = rect.width().toLong() * rect.height().toLong()
+                        if (rect.width() > 10 && rect.height() > 10 && area in 101L..maxCandidateArea) {
                             val key = "$rawText@${rect.left},${rect.top},${rect.right},${rect.bottom}"
                             if (seenKeys.add(key)) {
                                 results.add(ScreenTextCandidate(text = rawText, bounds = rect))
@@ -111,7 +128,6 @@ object ScreenDetector {
                 }
             }
 
-            val childCount = runCatching { node.childCount }.getOrDefault(0)
             for (i in 0 until childCount) {
                 val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
                 queue.addLast(child)
@@ -159,40 +175,21 @@ object ScreenDetector {
 
     fun detectTextInService(service: AccessibilityService, query: String): Boolean {
         if (query.isBlank()) return false
-        val ownPackage = service.packageName
-        val roots = mutableListOf<AccessibilityNodeInfo>()
-
-        runCatching {
-            service.windows?.forEach { window ->
-                val root = window.root ?: return@forEach
-                if (root.packageName?.toString() != ownPackage) {
-                    roots.add(root)
-                }
-            }
-        }
-
-        if (roots.isEmpty()) {
-            runCatching {
-                service.rootInActiveWindow?.let { activeRoot ->
-                    if (activeRoot.packageName?.toString() != ownPackage) {
-                        roots.add(activeRoot)
-                    }
-                }
-            }
-        }
+        val roots = collectTargetAppRoots(service)
 
         val queue = ArrayDeque<AccessibilityNodeInfo>(roots)
         var visited = 0
         while (queue.isNotEmpty() && visited < MAX_TRAVERSED_NODES) {
             val node = queue.removeFirst()
             visited++
+            val childCount = runCatching { node.childCount }.getOrDefault(0)
             val matched = runCatching {
+                if (!node.isVisibleToUser) return@runCatching false
                 ClickEngineCalculator.matchesTargetText(node.text, query) ||
-                    ClickEngineCalculator.matchesTargetText(node.contentDescription, query)
+                    (childCount == 0 && ClickEngineCalculator.matchesTargetText(node.contentDescription, query))
             }.getOrDefault(false)
             if (matched) return true
 
-            val childCount = runCatching { node.childCount }.getOrDefault(0)
             for (i in 0 until childCount) {
                 val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
                 queue.addLast(child)
