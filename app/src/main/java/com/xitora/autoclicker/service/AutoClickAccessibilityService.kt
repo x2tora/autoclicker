@@ -298,35 +298,32 @@ class AutoClickAccessibilityService : AccessibilityService() {
 
                                     val conditionMatched = AtomicBoolean(false)
 
-                                    // Run text/image detection asynchronously so repeat taps never stutter or wait on screenshots.
+                                    // Run image detection asynchronously so repeat taps never stutter or wait on screenshots.
                                     val detectJob = serviceScope.launch(Dispatchers.Default) {
                                         var lastScreenshotCheckMs = 0L
-                                        delay(detectPollMs)
                                         while (isActive && stateHolder.runtime.value.isClicking && !conditionMatched.get()) {
                                             val currentTaps = tapsInStep.get()
-                                            if (currentTaps >= 1) {
-                                                val nowMs = SystemClock.elapsedRealtime()
-                                                var detected = false
-                                                var evaluated = false
+                                            val nowMs = SystemClock.elapsedRealtime()
+                                            var detected = false
+                                            var evaluated = false
 
-                                                if (!liveStep.targetImagePath.isNullOrBlank() &&
-                                                    nowMs - lastScreenshotCheckMs >= 1100L
-                                                ) {
-                                                    lastScreenshotCheckMs = nowMs
-                                                    val imgMatched = ScreenDetector.detectImageInService(
-                                                        service = this@AutoClickAccessibilityService,
-                                                        imagePath = liveStep.targetImagePath,
-                                                        similarityPercent = liveStep.imageSimilarityPercent
-                                                    )
-                                                    if (imgMatched != null) {
-                                                        evaluated = true
-                                                        detected = imgMatched
-                                                    }
+                                            if (!liveStep.targetImagePath.isNullOrBlank() &&
+                                                nowMs - lastScreenshotCheckMs >= 1100L
+                                            ) {
+                                                lastScreenshotCheckMs = nowMs
+                                                val imgMatched = ScreenDetector.detectImageInService(
+                                                    service = this@AutoClickAccessibilityService,
+                                                    imagePath = liveStep.targetImagePath,
+                                                    similarityPercent = liveStep.imageSimilarityPercent
+                                                )
+                                                if (imgMatched != null) {
+                                                    evaluated = true
+                                                    detected = imgMatched
                                                 }
-                                                if (evaluated && detectGuard.onConditionEvaluated(detected, currentTaps)) {
-                                                    conditionMatched.set(true)
-                                                    break
-                                                }
+                                            }
+                                            if (evaluated && detectGuard.onConditionEvaluated(detected, currentTaps)) {
+                                                conditionMatched.set(true)
+                                                break
                                             }
                                             delay(detectPollMs)
                                         }
