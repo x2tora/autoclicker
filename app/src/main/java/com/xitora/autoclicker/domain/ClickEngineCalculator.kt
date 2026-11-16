@@ -193,6 +193,6 @@ class ScenarioDetectGuard {
             seenAbsent = true
             return false
         }
-        return seenAbsent && tapsInStep >= 1
+        return (seenAbsent && tapsInStep >= 1) || tapsInStep >= 3
     }
 }

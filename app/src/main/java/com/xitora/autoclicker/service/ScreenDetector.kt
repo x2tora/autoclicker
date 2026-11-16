@@ -118,17 +118,24 @@ object ScreenDetector {
         }.getOrNull()
     }
 
+    data class ImageMatchResult(
+        val matched: Boolean,
+        val bestScore: Int
+    )
+
     /**
-     * Returns true/false when a screenshot was captured and compared, or null if screenshot capture failed.
+     * Returns [ImageMatchResult] when a screenshot was captured and compared, or null if screenshot capture failed.
      */
-    suspend fun detectImageInService(
+    suspend fun detectImageWithScoreInService(
         service: AccessibilityService,
         imagePath: String?,
         similarityPercent: Int
-    ): Boolean? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || imagePath.isNullOrBlank()) return false
+    ): ImageMatchResult? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || imagePath.isNullOrBlank()) {
+            return ImageMatchResult(matched = false, bestScore = 0)
+        }
         val file = File(imagePath)
-        if (!file.exists()) return false
+        if (!file.exists()) return ImageMatchResult(matched = false, bestScore = 0)
 
         val threshold = similarityPercent.coerceIn(50, 99)
         val screenBmp = captureSoftwareScreenBitmap(service) ?: return null
@@ -142,7 +149,7 @@ object ScreenDetector {
                 if (scaledScreen !== screenBmp) scaledScreen.recycle()
 
                 val variants = loadScaledTemplateVariants(file, sw, sh)
-                if (variants.isEmpty()) return@withContext false
+                if (variants.isEmpty()) return@withContext ImageMatchResult(matched = false, bestScore = 0)
 
                 var bestScore = 0
                 for (tpl in variants) {
@@ -161,7 +168,7 @@ object ScreenDetector {
                     }
                     if (bestScore >= threshold) break
                 }
-                bestScore >= threshold
+                ImageMatchResult(matched = bestScore >= threshold, bestScore = bestScore)
             } finally {
                 screenBmp.recycle()
             }
@@ -471,7 +478,7 @@ object ScreenDetector {
             } else {
                 val zncc = (num / kotlin.math.sqrt(varT * varS)).coerceIn(0.0, 1.0)
                 val znccPct = (zncc * 100.0).roundToInt().coerceIn(0, 100)
-                if (znccPct < 45) 0 else ((l1Score * 0.35) + (znccPct * 0.65)).roundToInt().coerceIn(0, 100)
+                if (znccPct < 52) 0 else ((l1Score * 0.35) + (znccPct * 0.65)).roundToInt().coerceIn(0, 100)
             }
             if (candidateScore > bestOverallScore) {
                 bestOverallScore = candidateScore

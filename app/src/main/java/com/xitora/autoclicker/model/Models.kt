@@ -57,7 +57,7 @@ data class ScenarioStep(
     val tapDurationMs: Long = 40L,
     val detectCheckIntervalMs: Long = 450L,
     val targetImagePath: String? = null,
-    val imageSimilarityPercent: Int = 85,
+    val imageSimilarityPercent: Int = 78,
     val scrollDirection: ScrollDirection = ScrollDirection.DOWN,
     val scrollDistanceDp: Int = 340,
     val scrollDurationMs: Long = 360L,
@@ -170,6 +170,7 @@ data class OverlayRuntimeState(
     val elapsedMs: Long = 0L,
     val clickCount: Long = 0L,
     val currentScenarioStepOrder: Int = 1,
+    val lastDetectScore: Int? = null,
     val controlPanelX: Int = 24,
     val controlPanelY: Int = 240
 )

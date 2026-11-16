@@ -361,7 +361,8 @@ class FloatingControlPanelView(
         activeConfig: ClickTimingConfig,
         isDarkSurface: Boolean,
         currentScenarioStepOrder: Int = 1,
-        totalScenarioSteps: Int = 0
+        totalScenarioSteps: Int = 0,
+        lastDetectScore: Int? = null
     ) {
         val showMultiControls = mode == ClickMode.MULTI || mode == ClickMode.SCENARIO
         addBtn.visibility = if (showMultiControls) VISIBLE else GONE
@@ -376,7 +377,11 @@ class FloatingControlPanelView(
         playPauseBtn.isRunning = isRunning
         elapsedLabel.text = ClickEngineCalculator.formatElapsedMmSs(elapsedMs)
         repeatLabel.text = if (mode == ClickMode.SCENARIO && isRunning && totalScenarioSteps > 0) {
-            "#${currentScenarioStepOrder}/$totalScenarioSteps"
+            if (lastDetectScore != null) {
+                "#${currentScenarioStepOrder}/$totalScenarioSteps · ${lastDetectScore}%"
+            } else {
+                "#${currentScenarioStepOrder}/$totalScenarioSteps"
+            }
         } else {
             ClickEngineCalculator.formatRepeatStatusBadge(
                 config = activeConfig,

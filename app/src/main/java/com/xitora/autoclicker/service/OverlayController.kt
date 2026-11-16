@@ -336,7 +336,8 @@ class OverlayController(
             activeConfig = activeConfig,
             isDarkSurface = isEffectiveDark(),
             currentScenarioStepOrder = rt.currentScenarioStepOrder,
-            totalScenarioSteps = data.scenarioSteps.size
+            totalScenarioSteps = data.scenarioSteps.size,
+            lastDetectScore = rt.lastDetectScore
         )
     }
 
