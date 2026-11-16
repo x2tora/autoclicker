@@ -709,68 +709,76 @@ fun TargetPointEditDialog(
         summary = "화면 좌표 (${target.xPx.roundToInt()}, ${target.yPx.roundToInt()})",
         onDismissRequest = onDismiss
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TimeUnitValueRow(
-                title = "이 지점 대기 간격",
-                subtitle = "클릭 완료 후 다음 타겟까지 간격 (ms)",
-                value = editing.intervalValue,
-                unit = editing.intervalUnit,
-                quickPresets = listOf(50L, 100L, 500L, 1000L),
-                onChanged = { v, u -> editing = editing.copy(intervalValue = v, intervalUnit = u) }
-            )
-            HorizontalDivider()
-            TimeUnitValueRow(
-                title = "클릭 지속시간",
-                subtitle = "이 지점을 누르고 있는 시간 (ms)",
-                value = editing.durationValue,
-                unit = editing.durationUnit,
-                quickPresets = listOf(20L, 40L, 100L),
-                onChanged = { v, u -> editing = editing.copy(durationValue = v, durationUnit = u) }
-            )
-            HorizontalDivider()
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 310.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("봇 방지 랜덤 터치", style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold))
-                    Text(
-                        if (editing.antiBotRandomEnabled) "반경 ${editing.randomRadiusDp}dp 내 랜덤 클릭" else "정확한 중심 좌표 클릭",
-                        style = MiuixTheme.textStyles.footnote2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                TimeUnitValueRow(
+                    title = "이 지점 대기 간격",
+                    subtitle = "클릭 완료 후 다음 타겟까지 간격 (ms)",
+                    value = editing.intervalValue,
+                    unit = editing.intervalUnit,
+                    quickPresets = listOf(50L, 100L, 500L, 1000L),
+                    onChanged = { v, u -> editing = editing.copy(intervalValue = v, intervalUnit = u) }
+                )
+                HorizontalDivider()
+                TimeUnitValueRow(
+                    title = "클릭 지속시간",
+                    subtitle = "이 지점을 누르고 있는 시간 (ms)",
+                    value = editing.durationValue,
+                    unit = editing.durationUnit,
+                    quickPresets = listOf(20L, 40L, 100L),
+                    onChanged = { v, u -> editing = editing.copy(durationValue = v, durationUnit = u) }
+                )
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("봇 방지 랜덤 터치", style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold))
+                        Text(
+                            if (editing.antiBotRandomEnabled) "반경 ${editing.randomRadiusDp}dp 내 랜덤 클릭" else "정확한 중심 좌표 클릭",
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
+                    Switch(
+                        checked = editing.antiBotRandomEnabled,
+                        onCheckedChange = { editing = editing.copy(antiBotRandomEnabled = it) }
                     )
                 }
-                Switch(
-                    checked = editing.antiBotRandomEnabled,
-                    onCheckedChange = { editing = editing.copy(antiBotRandomEnabled = it) }
-                )
-            }
-            AnimatedVisibility(
-                visible = editing.antiBotRandomEnabled,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Slider(
-                    value = editing.randomRadiusDp.toFloat(),
-                    onValueChange = { editing = editing.copy(randomRadiusDp = it.roundToInt().coerceIn(8, 80)) },
-                    valueRange = 8f..80f,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            if (canDelete) {
-                TextButton(
-                    text = "이 타겟 삭제",
-                    onClick = {
-                        onDelete(target.id)
-                        onDismiss()
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        color = MiuixTheme.colorScheme.error,
-                        textColor = Color.White
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AnimatedVisibility(
+                    visible = editing.antiBotRandomEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Slider(
+                        value = editing.randomRadiusDp.toFloat(),
+                        onValueChange = { editing = editing.copy(randomRadiusDp = it.roundToInt().coerceIn(8, 80)) },
+                        valueRange = 8f..80f,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (canDelete) {
+                    TextButton(
+                        text = "이 타겟 삭제",
+                        onClick = {
+                            onDelete(target.id)
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            color = MiuixTheme.colorScheme.error,
+                            textColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -778,7 +786,7 @@ fun TargetPointEditDialog(
             ) {
                 TextButton(text = "취소", onClick = onDismiss, modifier = Modifier.weight(1f))
                 TextButton(
-                    text = "적용",
+                    text = "저장",
                     onClick = {
                         onSave(
                             target.copy(
@@ -842,7 +850,7 @@ fun ScenarioStepEditDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 430.dp)
+                    .heightIn(max = 300.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -1154,7 +1162,7 @@ fun ScenarioStepEditDialog(
             ) {
                 TextButton(text = "취소", onClick = onDismiss, modifier = Modifier.weight(1f))
                 TextButton(
-                    text = "적용",
+                    text = "저장",
                     onClick = {
                         onSave(editing.copy(title = editing.title.trim().ifEmpty { step.title }))
                         onDismiss()

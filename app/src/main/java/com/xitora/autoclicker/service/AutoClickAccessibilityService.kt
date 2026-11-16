@@ -10,6 +10,7 @@ import com.xitora.autoclicker.data.AutoClickerStateHolder
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.ClickMode
 import com.xitora.autoclicker.model.DetectionConditionType
+import com.xitora.autoclicker.model.ScenarioStep
 import com.xitora.autoclicker.model.ScenarioStepType
 import kotlinx.coroutines.*
 import kotlin.coroutines.resume
@@ -279,6 +280,14 @@ class AutoClickAccessibilityService : AccessibilityService() {
 
                             when (liveStep.type) {
                                 ScenarioStepType.REPEAT_UNTIL_DETECT -> {
+                                    if (!ScreenDetector.hasValidDetectionTarget(liveStep)) {
+                                        stopClicking()
+                                        promptDetectionTargetPicker(
+                                            step = liveStep,
+                                            resumeAfterSave = true
+                                        )
+                                        return@launch
+                                    }
                                     var lastCondCheckMs = 0L
                                     var lastScreenshotCheckMs = 0L
                                     val detectPollMs = liveStep.detectCheckIntervalMs.coerceAtLeast(200L)
@@ -407,6 +416,60 @@ class AutoClickAccessibilityService : AccessibilityService() {
             overlayController.setTargetsTouchThrough(false)
             overlayController.updateStatusReadout(completedCycles)
         }
+    }
+
+    /**
+     * Collects visible text regions on the active screen and displays an interactive overlay
+     * so the user can tap or drag over the area to detect, saving it as [ScenarioStep.targetText]
+     * (or cropped image template) and optionally resuming scenario execution immediately.
+     */
+    fun promptDetectionTargetPicker(step: ScenarioStep, resumeAfterSave: Boolean) {
+        if (!::overlayController.isInitialized) return
+        val candidates = ScreenDetector.collectScreenTextCandidates(this)
+        overlayController.openDetectionTargetPicker(
+            step = step,
+            candidates = candidates,
+            resumeAfterSave = resumeAfterSave,
+            onSaveText = { chosenText ->
+                stateHolder.updateScenarioStep(
+                    step.copy(
+                        targetText = chosenText,
+                        conditionType = if (step.conditionType == DetectionConditionType.IMAGE_ONLY) {
+                            DetectionConditionType.TEXT_OR_IMAGE
+                        } else {
+                            step.conditionType
+                        }
+                    )
+                )
+                if (resumeAfterSave) {
+                    startClicking()
+                }
+            },
+            onSaveCropRect = { cropRect ->
+                serviceScope.launch {
+                    delay(120L)
+                    val savedPath = ScreenDetector.captureAndCropTemplateImage(
+                        service = this@AutoClickAccessibilityService,
+                        cropRect = cropRect
+                    )
+                    if (savedPath != null) {
+                        stateHolder.updateScenarioStep(
+                            step.copy(
+                                targetImagePath = savedPath,
+                                conditionType = if (step.conditionType == DetectionConditionType.TEXT_ONLY) {
+                                    DetectionConditionType.TEXT_OR_IMAGE
+                                } else {
+                                    step.conditionType
+                                }
+                            )
+                        )
+                        if (resumeAfterSave) {
+                            startClicking()
+                        }
+                    }
+                }
+            }
+        )
     }
 
     private suspend fun performTapGesture(x: Float, y: Float, durationMs: Long): Boolean {

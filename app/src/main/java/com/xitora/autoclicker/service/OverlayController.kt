@@ -3,6 +3,7 @@ package com.xitora.autoclicker.service
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.view.Gravity
 import android.view.View
@@ -376,37 +377,27 @@ class OverlayController(
         val rt = stateHolder.runtime.value
         if (rt.activeMode == ClickMode.SCENARIO) {
             val step = stateHolder.state.value.scenarioSteps.firstOrNull { it.id == target.id } ?: return
-            val initial = ClickTimingConfig(
-                intervalValue = step.postDelayMs,
-                intervalUnit = TimeUnitOption.MS,
-                durationValue = step.tapDurationMs,
-                durationUnit = TimeUnitOption.MS,
-                antiBotRandomEnabled = step.antiBotRandomEnabled,
-                randomRadiusDp = step.randomRadiusDp
-            )
             val canDelete = stateHolder.state.value.scenarioSteps.size > 1
-            val modal = OverlayModalFactory.buildTimingModal(
+            val modal = OverlayModalFactory.buildScenarioStepModal(
                 context = serviceContext,
-                title = "#${step.order} ${step.title}",
-                subtitle = "클릭 간격란은 실행 후 다음 단계 대기(ms)로 적용됩니다. 감지/스크롤 상세 옵션은 앱에서 편집하세요.",
-                initialConfig = initial,
-                showRepeatOptions = false,
+                step = step,
                 isDark = isEffectiveDark(),
-                showDeleteButton = canDelete,
+                canDelete = canDelete,
+                onPickOnScreen = { draftStep ->
+                    stateHolder.updateScenarioStep(draftStep)
+                    dismissModal()
+                    AutoClickAccessibilityService.instance?.promptDetectionTargetPicker(
+                        step = draftStep,
+                        resumeAfterSave = false
+                    )
+                },
                 onDelete = {
                     stateHolder.removeScenarioStepById(step.id)
                     dismissModal()
                 },
                 onCancel = { dismissModal() },
-                onSave = { updated ->
-                    stateHolder.updateScenarioStep(
-                        step.copy(
-                            postDelayMs = ClickEngineCalculator.toMillis(updated.intervalValue, updated.intervalUnit).coerceAtLeast(20L),
-                            tapDurationMs = ClickEngineCalculator.toMillis(updated.durationValue, updated.durationUnit).coerceIn(10L, 60_000L),
-                            antiBotRandomEnabled = updated.antiBotRandomEnabled,
-                            randomRadiusDp = updated.randomRadiusDp
-                        )
-                    )
+                onSave = { updatedStep ->
+                    stateHolder.updateScenarioStep(updatedStep)
                     dismissModal()
                 }
             )
@@ -459,6 +450,33 @@ class OverlayController(
             }
         )
         showModalView(modal)
+    }
+
+    fun openDetectionTargetPicker(
+        step: ScenarioStep,
+        candidates: List<ScreenDetector.ScreenTextCandidate>,
+        resumeAfterSave: Boolean,
+        onSaveText: (String) -> Unit,
+        onSaveCropRect: (Rect) -> Unit
+    ) {
+        dismissModal()
+        val pickerView = OverlayModalFactory.buildScreenDetectionPickerOverlay(
+            context = serviceContext,
+            step = step,
+            candidates = candidates,
+            isDark = isEffectiveDark(),
+            resumeAfterSave = resumeAfterSave,
+            onSaveText = { chosenText ->
+                dismissModal()
+                onSaveText(chosenText)
+            },
+            onSaveCropRect = { rect ->
+                dismissModal()
+                onSaveCropRect(rect)
+            },
+            onCancel = { dismissModal() }
+        )
+        showModalView(pickerView)
     }
 
     private fun showModalView(view: View) {

@@ -243,13 +243,19 @@ fun HomeScreen(
             title = sheetTitle,
             onDismissRequest = { settingsSheetMode = null }
         ) {
-            LazyColumn(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 560.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 440.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp)
+                ) {
                 when (mode) {
                     ClickMode.SINGLE -> {
                         item(key = "single_target_info") {
@@ -487,6 +493,10 @@ fun HomeScreen(
                                 canMoveDown = step.order < state.scenarioSteps.size,
                                 canDelete = state.scenarioSteps.size > 1,
                                 onEdit = { editingScenarioStep = step },
+                                onQuickChangeScrollDirection = { newDir ->
+                                    onUpdateScenarioStep(step.copy(scrollDirection = newDir))
+                                    onNotify("단계 #${step.order} 스크롤 방향이 저장되었습니다.")
+                                },
                                 onMoveUp = { onMoveScenarioStep(step.id, true) },
                                 onMoveDown = { onMoveScenarioStep(step.id, false) },
                                 onDelete = {
@@ -505,6 +515,17 @@ fun HomeScreen(
                         }
                     }
                 }
+                }
+
+                TextButton(
+                    text = "저장 완료",
+                    onClick = {
+                        settingsSheetMode = null
+                        onNotify("$sheetTitle 내용을 저장했습니다.")
+                    },
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -1138,6 +1159,7 @@ private fun ScenarioStepRowCard(
     canMoveDown: Boolean,
     canDelete: Boolean,
     onEdit: () -> Unit,
+    onQuickChangeScrollDirection: (ScrollDirection) -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onDelete: () -> Unit,
@@ -1157,7 +1179,7 @@ private fun ScenarioStepRowCard(
                 if (step.conditionType != DetectionConditionType.TEXT_ONLY && !step.targetImagePath.isNullOrBlank()) {
                     add("이미지 ${step.imageSimilarityPercent}%")
                 }
-            }.joinToString(" 또는 ").ifEmpty { "감지 조건 미설정" }
+            }.joinToString(" 또는 ").ifEmpty { "실행 시 화면에서 감지 영역 선택" }
             "${step.repeatIntervalMs}ms 반복 · $condLabel · 후대기 ${step.postDelayMs}ms"
         }
         ScenarioStepType.SINGLE_TAP ->
@@ -1174,85 +1196,119 @@ private fun ScenarioStepRowCard(
         cornerRadius = 16.dp,
         insideMargin = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .squircleBackground(badgeColor.copy(alpha = 0.14f), 12.dp),
-                contentAlignment = Alignment.Center
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = step.badgeText(),
-                    style = MiuixTheme.textStyles.body2.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontFeatureSettings = "tnum"
-                    ),
-                    color = badgeColor,
-                    maxLines = 1
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = step.title,
-                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
-                    color = MiuixTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = detailText,
-                    style = MiuixTheme.textStyles.footnote2.copy(fontFeatureSettings = "tnum"),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
-                        .squircleBackground(MiuixTheme.colorScheme.secondaryContainer, 8.dp)
-                        .squircleClip(8.dp)
-                        .clickable(enabled = canMoveUp, onClick = onMoveUp),
+                        .size(40.dp)
+                        .squircleBackground(badgeColor.copy(alpha = 0.14f), 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "↑",
-                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Bold),
-                        color = MiuixTheme.colorScheme.onSecondaryContainer.copy(alpha = if (canMoveUp) 1f else 0.3f)
+                        text = step.badgeText(),
+                        style = MiuixTheme.textStyles.body2.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = badgeColor,
+                        maxLines = 1
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .squircleBackground(MiuixTheme.colorScheme.secondaryContainer, 8.dp)
-                        .squircleClip(8.dp)
-                        .clickable(enabled = canMoveDown, onClick = onMoveDown),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "↓",
-                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Bold),
-                        color = MiuixTheme.colorScheme.onSecondaryContainer.copy(alpha = if (canMoveDown) 1f else 0.3f)
+                        text = step.title,
+                        style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    Text(
+                        text = detailText,
+                        style = MiuixTheme.textStyles.footnote2.copy(fontFeatureSettings = "tnum"),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .squircleBackground(MiuixTheme.colorScheme.secondaryContainer, 8.dp)
+                            .squircleClip(8.dp)
+                            .clickable(enabled = canMoveUp, onClick = onMoveUp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "↑",
+                            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Bold),
+                            color = MiuixTheme.colorScheme.onSecondaryContainer.copy(alpha = if (canMoveUp) 1f else 0.3f)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .squircleBackground(MiuixTheme.colorScheme.secondaryContainer, 8.dp)
+                            .squircleClip(8.dp)
+                            .clickable(enabled = canMoveDown, onClick = onMoveDown),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "↓",
+                            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Bold),
+                            color = MiuixTheme.colorScheme.onSecondaryContainer.copy(alpha = if (canMoveDown) 1f else 0.3f)
+                        )
+                    }
+                }
+
+                if (canDelete) {
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = MiuixIcons.Delete,
+                            contentDescription = "단계 삭제",
+                            tint = Color(0xFFD93025)
+                        )
+                    }
                 }
             }
 
-            if (canDelete) {
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = MiuixIcons.Delete,
-                        contentDescription = "단계 삭제",
-                        tint = Color(0xFFD93025)
+            if (step.type == ScenarioStepType.SCROLL) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val dirs = listOf(
+                        ScrollDirection.DOWN to "↓ 아래로",
+                        ScrollDirection.UP to "↑ 위로",
+                        ScrollDirection.LEFT to "← 왼쪽",
+                        ScrollDirection.RIGHT to "→ 오른쪽"
                     )
+                    dirs.forEach { (dir, label) ->
+                        val selected = step.scrollDirection == dir
+                        SquirclePillBadge(
+                            text = label,
+                            backgroundColor = if (selected) {
+                                Color(0xFF06B6D4)
+                            } else {
+                                MiuixTheme.colorScheme.secondaryContainer
+                            },
+                            contentColor = if (selected) {
+                                Color.White
+                            } else {
+                                MiuixTheme.colorScheme.onSecondaryContainer
+                            },
+                            onClick = { onQuickChangeScrollDirection(dir) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }

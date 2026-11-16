@@ -4,11 +4,14 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
 import com.xitora.autoclicker.domain.ClickEngineCalculator
+import com.xitora.autoclicker.model.DetectionConditionType
+import com.xitora.autoclicker.model.ScenarioStep
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -38,8 +41,121 @@ object ScreenDetector {
         val pixels: IntArray
     )
 
+    data class ScreenTextCandidate(
+        val text: String,
+        val bounds: Rect
+    )
+
     @Volatile
     private var cachedTemplate: CachedTemplate? = null
+
+    fun hasValidDetectionTarget(step: ScenarioStep): Boolean {
+        return when (step.conditionType) {
+            DetectionConditionType.TEXT_ONLY -> step.targetText.isNotBlank()
+            DetectionConditionType.IMAGE_ONLY -> !step.targetImagePath.isNullOrBlank()
+            DetectionConditionType.TEXT_OR_IMAGE ->
+                step.targetText.isNotBlank() || !step.targetImagePath.isNullOrBlank()
+        }
+    }
+
+    /**
+     * Collects all visible text nodes and their screen bounding rectangles from the underlying app window
+     * so the user can tap or drag over a region on screen to select the text to detect.
+     */
+    fun collectScreenTextCandidates(service: AccessibilityService): List<ScreenTextCandidate> {
+        val ownPackage = service.packageName
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+
+        runCatching {
+            service.windows?.forEach { window ->
+                val root = window.root ?: return@forEach
+                if (root.packageName?.toString() != ownPackage) {
+                    roots.add(root)
+                }
+            }
+        }
+
+        if (roots.isEmpty()) {
+            runCatching {
+                service.rootInActiveWindow?.let { activeRoot ->
+                    if (activeRoot.packageName?.toString() != ownPackage) {
+                        roots.add(activeRoot)
+                    }
+                }
+            }
+        }
+
+        val queue = ArrayDeque<AccessibilityNodeInfo>(roots)
+        val results = mutableListOf<ScreenTextCandidate>()
+        val seenKeys = HashSet<String>()
+        var visited = 0
+
+        while (queue.isNotEmpty() && visited < MAX_TRAVERSED_NODES) {
+            val node = queue.removeFirst()
+            visited++
+
+            runCatching {
+                if (node.isVisibleToUser) {
+                    val rawText = node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    if (rawText != null && rawText.length <= 80) {
+                        val rect = Rect()
+                        node.getBoundsInScreen(rect)
+                        if (rect.width() > 10 && rect.height() > 10) {
+                            val key = "$rawText@${rect.left},${rect.top},${rect.right},${rect.bottom}"
+                            if (seenKeys.add(key)) {
+                                results.add(ScreenTextCandidate(text = rawText, bounds = rect))
+                            }
+                        }
+                    }
+                }
+            }
+
+            val childCount = runCatching { node.childCount }.getOrDefault(0)
+            for (i in 0 until childCount) {
+                val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
+                queue.addLast(child)
+            }
+        }
+
+        // Sort smaller, more specific UI elements first so tapping inside a button hits the button text
+        return results.sortedBy { it.bounds.width().toLong() * it.bounds.height().toLong() }
+    }
+
+    /**
+     * Captures the current screen and crops [cropRect] into a saved template image file (Android 11+).
+     */
+    suspend fun captureAndCropTemplateImage(
+        service: AccessibilityService,
+        cropRect: Rect
+    ): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        val screenBmp = captureSoftwareScreenBitmap(service) ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val left = cropRect.left.coerceIn(0, (screenBmp.width - 16).coerceAtLeast(0))
+                val top = cropRect.top.coerceIn(0, (screenBmp.height - 16).coerceAtLeast(0))
+                val right = cropRect.right.coerceIn(left + 16, screenBmp.width)
+                val bottom = cropRect.bottom.coerceIn(top + 16, screenBmp.height)
+                val w = (right - left).coerceAtLeast(16)
+                val h = (bottom - top).coerceAtLeast(16)
+                if (left + w > screenBmp.width || top + h > screenBmp.height) return@withContext null
+
+                val cropped = Bitmap.createBitmap(screenBmp, left, top, w, h)
+                val dir = File(service.filesDir, "scenario_templates").apply { mkdirs() }
+                val outFile = File(dir, "tpl_${System.currentTimeMillis()}.png")
+                FileOutputStream(outFile).use { fos ->
+                    cropped.compress(Bitmap.CompressFormat.PNG, 92, fos)
+                }
+                if (cropped !== screenBmp) cropped.recycle()
+                outFile.absolutePath
+            } catch (_: Throwable) {
+                null
+            } finally {
+                screenBmp.recycle()
+            }
+        }
+    }
 
     fun detectTextInService(service: AccessibilityService, query: String): Boolean {
         if (query.isBlank()) return false

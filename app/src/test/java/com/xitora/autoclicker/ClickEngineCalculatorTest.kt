@@ -220,6 +220,11 @@ class ClickEngineCalculatorTest {
 
         assertTrue(ClickEngineCalculator.matchesTargetText("보상 획득 완료!", "완료 | 수령"))
         assertFalse(ClickEngineCalculator.matchesTargetText("진행 중", "완료 | 수령"))
+
+        val unconfiguredStep = defaultScenarioSteps().first()
+        assertFalse(ScreenDetector.hasValidDetectionTarget(unconfiguredStep))
+        assertTrue(ScreenDetector.hasValidDetectionTarget(unconfiguredStep.copy(targetText = "보상 받기")))
+        assertTrue(ScreenDetector.hasValidDetectionTarget(unconfiguredStep.copy(targetImagePath = "/tmp/tpl.png")))
     }
 
     @Test

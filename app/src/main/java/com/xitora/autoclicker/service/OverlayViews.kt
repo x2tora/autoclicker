@@ -981,4 +981,583 @@ object OverlayModalFactory {
             }
         }
     }
+
+    private fun createTextEditText(
+        context: Context,
+        initialText: String,
+        hintText: String,
+        bgCol: Int,
+        textColor: Int,
+        hintColor: Int
+    ): EditText {
+        return EditText(context).apply {
+            setText(initialText)
+            hint = hintText
+            setHintTextColor(hintColor)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setTextColor(textColor)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            gravity = Gravity.CENTER_VERTICAL
+            setSingleLine(true)
+            val padH = context.dpToPxInt(12f)
+            val padV = context.dpToPxInt(8f)
+            setPadding(padH, padV, padH, padV)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = context.dpToPx(12f)
+                setColor(bgCol)
+            }
+        }
+    }
+
+    fun buildScenarioStepModal(
+        context: Context,
+        step: ScenarioStep,
+        isDark: Boolean,
+        canDelete: Boolean,
+        onPickOnScreen: (ScenarioStep) -> Unit,
+        onDelete: () -> Unit,
+        onCancel: () -> Unit,
+        onSave: (ScenarioStep) -> Unit
+    ): View {
+        val bgColor = if (isDark) Color.parseColor("#1E2128") else Color.parseColor("#FFFFFF")
+        val cardSurface = if (isDark) Color.parseColor("#272B35") else Color.parseColor("#F4F6FA")
+        val textPrimary = if (isDark) Color.parseColor("#F1F4FA") else Color.parseColor("#181C24")
+        val textSecondary = if (isDark) Color.parseColor("#9AA3B5") else Color.parseColor("#636D7E")
+        val primaryBlue = Color.parseColor("#3482FF")
+        val accentPurple = Color.parseColor("#7C5CFF")
+        val dangerRed = Color.parseColor("#E05263")
+
+        val backdrop = FrameLayout(context).apply {
+            setBackgroundColor(Color.argb(145, 0, 0, 0))
+            setOnClickListener { onCancel() }
+        }
+
+        val outerCard = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = context.dpToPxInt(18f)
+            setPadding(p, p, p, p)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = context.dpToPx(24f)
+                setColor(bgColor)
+                setStroke(context.dpToPxInt(1f), Color.argb(35, 130, 145, 170))
+            }
+            setOnClickListener { /* consume */ }
+        }
+
+        outerCard.addView(TextView(context).apply {
+            text = "#${step.order} ${step.title}"
+            setTextColor(textPrimary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        })
+        outerCard.addView(TextView(context).apply {
+            text = "${step.type.label} · 변경 후 아래 [저장] 버튼을 눌러주세요"
+            setTextColor(textSecondary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(10f))
+        })
+
+        val scroll = ScrollView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        }
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        var selectedScrollDir = step.scrollDirection
+        val targetTextInput = createTextEditText(
+            context = context,
+            initialText = step.targetText,
+            hintText = "감지할 글자 입력 (예: 완료|확인)",
+            bgCol = cardSurface,
+            textColor = textPrimary,
+            hintColor = textSecondary
+        )
+        val repeatIntervalInput = createNumericEditText(context, step.repeatIntervalMs.toString(), cardSurface, textPrimary)
+        val tapDurationInput = createNumericEditText(context, step.tapDurationMs.toString(), cardSurface, textPrimary)
+        val scrollDistInput = createNumericEditText(context, step.scrollDistanceDp.toString(), cardSurface, textPrimary)
+        val scrollDurInput = createNumericEditText(context, step.scrollDurationMs.toString(), cardSurface, textPrimary)
+        val postDelayInput = createNumericEditText(context, step.postDelayMs.toString(), cardSurface, textPrimary)
+
+        when (step.type) {
+            ScenarioStepType.REPEAT_UNTIL_DETECT -> {
+                body.addView(makeSectionLabel(context, "감지할 텍스트 (화면에서 찾을 문구)", textPrimary))
+                body.addView(targetTextInput.apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        context.dpToPxInt(42f)
+                    ).apply { bottomMargin = context.dpToPxInt(8f) }
+                })
+
+                val pickScreenBtn = createActionButton(
+                    context = context,
+                    label = "화면에서 감지할 부분 직접 선택",
+                    bgColor = accentPurple,
+                    textColor = Color.WHITE
+                ).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        context.dpToPxInt(40f)
+                    ).apply { bottomMargin = context.dpToPxInt(10f) }
+                    setOnClickListener {
+                        val draft = step.copy(
+                            targetText = targetTextInput.text.toString().trim(),
+                            repeatIntervalMs = (repeatIntervalInput.text.toString().toLongOrNull() ?: step.repeatIntervalMs).coerceAtLeast(20L),
+                            postDelayMs = (postDelayInput.text.toString().toLongOrNull() ?: step.postDelayMs).coerceAtLeast(20L)
+                        )
+                        onPickOnScreen(draft)
+                    }
+                }
+                body.addView(pickScreenBtn)
+
+                body.addView(makeSectionLabel(context, "반복 클릭 간격 (ms)", textPrimary))
+                body.addView(repeatIntervalInput.apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        context.dpToPxInt(40f)
+                    ).apply { bottomMargin = context.dpToPxInt(8f) }
+                })
+            }
+            ScenarioStepType.SINGLE_TAP -> {
+                body.addView(makeSectionLabel(context, "클릭 지속시간 (ms)", textPrimary))
+                body.addView(tapDurationInput.apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        context.dpToPxInt(40f)
+                    ).apply { bottomMargin = context.dpToPxInt(8f) }
+                })
+            }
+            ScenarioStepType.SCROLL -> {
+                body.addView(makeSectionLabel(context, "스크롤 방향", textPrimary))
+                val dirRow = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { bottomMargin = context.dpToPxInt(10f) }
+                }
+                val dirChips = mutableMapOf<ScrollDirection, TextView>()
+                val dirItems = listOf(
+                    ScrollDirection.DOWN to "↓ 아래로",
+                    ScrollDirection.UP to "↑ 위로",
+                    ScrollDirection.LEFT to "← 왼쪽",
+                    ScrollDirection.RIGHT to "→ 오른쪽"
+                )
+                dirItems.forEachIndexed { idx, (dir, label) ->
+                    val chip = createPillChip(
+                        context = context,
+                        label = label,
+                        selected = dir == selectedScrollDir,
+                        inactiveBg = cardSurface,
+                        inactiveText = textPrimary,
+                        activeBg = primaryBlue
+                    ).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(38f), 1f).apply {
+                            if (idx > 0) marginStart = context.dpToPxInt(5f)
+                        }
+                        setOnClickListener {
+                            selectedScrollDir = dir
+                            dirChips.forEach { (d, v) ->
+                                stylePillChip(context, v, d == selectedScrollDir, cardSurface, textPrimary, primaryBlue)
+                            }
+                        }
+                    }
+                    dirChips[dir] = chip
+                    dirRow.addView(chip)
+                }
+                body.addView(dirRow)
+
+                body.addView(makeSectionLabel(context, "스크롤 이동 거리 (dp)", textPrimary))
+                body.addView(scrollDistInput.apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        context.dpToPxInt(40f)
+                    ).apply { bottomMargin = context.dpToPxInt(8f) }
+                })
+
+                body.addView(makeSectionLabel(context, "스크롤 소요 시간 (ms)", textPrimary))
+                body.addView(scrollDurInput.apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        context.dpToPxInt(40f)
+                    ).apply { bottomMargin = context.dpToPxInt(8f) }
+                })
+            }
+        }
+
+        body.addView(makeSectionLabel(context, "실행 후 다음 단계 대기 시간 (ms)", textPrimary))
+        body.addView(postDelayInput.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                context.dpToPxInt(40f)
+            ).apply { bottomMargin = context.dpToPxInt(10f) }
+        })
+
+        if (canDelete) {
+            val delBtn = createActionButton(context, "이 단계 삭제", Color.argb(36, 224, 82, 99), dangerRed).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    context.dpToPxInt(40f)
+                ).apply { topMargin = context.dpToPxInt(4f) }
+                setOnClickListener { onDelete() }
+            }
+            body.addView(delBtn)
+        }
+
+        scroll.addView(body)
+        outerCard.addView(scroll)
+
+        val actionRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = context.dpToPxInt(12f) }
+        }
+        val cancelBtn = createActionButton(context, "취소", cardSurface, textPrimary).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(44f), 1f).apply {
+                marginEnd = context.dpToPxInt(6f)
+            }
+            setOnClickListener { onCancel() }
+        }
+        val saveBtn = createActionButton(context, "저장", primaryBlue, Color.WHITE).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(44f), 1f).apply {
+                marginStart = context.dpToPxInt(6f)
+            }
+            setOnClickListener {
+                val updated = step.copy(
+                    targetText = targetTextInput.text.toString().trim(),
+                    repeatIntervalMs = (repeatIntervalInput.text.toString().toLongOrNull() ?: step.repeatIntervalMs).coerceAtLeast(20L),
+                    tapDurationMs = (tapDurationInput.text.toString().toLongOrNull() ?: step.tapDurationMs).coerceIn(10L, 60_000L),
+                    scrollDirection = selectedScrollDir,
+                    scrollDistanceDp = (scrollDistInput.text.toString().toIntOrNull() ?: step.scrollDistanceDp).coerceIn(80, 1200),
+                    scrollDurationMs = (scrollDurInput.text.toString().toLongOrNull() ?: step.scrollDurationMs).coerceIn(80L, 5_000L),
+                    postDelayMs = (postDelayInput.text.toString().toLongOrNull() ?: step.postDelayMs).coerceAtLeast(20L)
+                )
+                onSave(updated)
+            }
+        }
+        actionRow.addView(cancelBtn)
+        actionRow.addView(saveBtn)
+        outerCard.addView(actionRow)
+
+        backdrop.addView(
+            outerCard,
+            FrameLayout.LayoutParams(
+                context.dpToPxInt(336f),
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        )
+        return backdrop
+    }
+
+    /**
+     * Full-screen interactive overlay shown when a REPEAT_UNTIL_DETECT step has no target configured
+     * (or when the user taps "화면에서 감지할 부분 직접 선택").
+     * Lets the user tap any highlighted text region on screen or drag a selection box over the target area,
+     * saves it as the detection target, and optionally resumes execution immediately.
+     */
+    fun buildScreenDetectionPickerOverlay(
+        context: Context,
+        step: ScenarioStep,
+        candidates: List<ScreenDetector.ScreenTextCandidate>,
+        isDark: Boolean,
+        resumeAfterSave: Boolean,
+        onSaveText: (String) -> Unit,
+        onSaveCropRect: (Rect) -> Unit,
+        onCancel: () -> Unit
+    ): View {
+        val bgColor = if (isDark) Color.parseColor("#1E2128") else Color.parseColor("#FFFFFF")
+        val cardSurface = if (isDark) Color.parseColor("#272B35") else Color.parseColor("#F4F6FA")
+        val textPrimary = if (isDark) Color.parseColor("#F1F4FA") else Color.parseColor("#181C24")
+        val textSecondary = if (isDark) Color.parseColor("#9AA3B5") else Color.parseColor("#636D7E")
+        val primaryBlue = Color.parseColor("#3482FF")
+        val emerald = Color.parseColor("#10B981")
+
+        val root = FrameLayout(context)
+        val textInput = createTextEditText(
+            context = context,
+            initialText = step.targetText,
+            hintText = "화면의 글자 박스를 터치하거나 직접 입력",
+            bgCol = cardSurface,
+            textColor = textPrimary,
+            hintColor = textSecondary
+        )
+
+        var selectedRect: Rect? = null
+        var cropImageBtn: TextView? = null
+
+        val canvasOverlay = object : View(context) {
+            private val candidateFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                color = Color.argb(40, 52, 130, 255)
+            }
+            private val candidateStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = context.dpToPx(1.8f)
+                color = Color.argb(210, 52, 130, 255)
+            }
+            private val selectedFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                color = Color.argb(65, 16, 185, 129)
+            }
+            private val selectedStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = context.dpToPx(2.8f)
+                color = emerald
+            }
+            private val dimPaint = Paint().apply {
+                style = Paint.Style.FILL
+                color = Color.argb(72, 0, 0, 0)
+            }
+
+            private var downX = 0f
+            private var downY = 0f
+            private var curX = 0f
+            private var curY = 0f
+            private var isDraggingBox = false
+            private val slop = ViewConfiguration.get(context).scaledTouchSlop
+
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dimPaint)
+                val rCorner = context.dpToPx(6f)
+                candidates.forEach { cand ->
+                    val rf = RectF(cand.bounds)
+                    canvas.drawRoundRect(rf, rCorner, rCorner, candidateFill)
+                    canvas.drawRoundRect(rf, rCorner, rCorner, candidateStroke)
+                }
+                selectedRect?.let { sel ->
+                    val rf = RectF(sel)
+                    canvas.drawRoundRect(rf, rCorner, rCorner, selectedFill)
+                    canvas.drawRoundRect(rf, rCorner, rCorner, selectedStroke)
+                }
+            }
+
+            @SuppressLint("ClickableViewAccessibility")
+            override fun onTouchEvent(event: MotionEvent): Boolean {
+                val rx = event.rawX
+                val ry = event.rawY
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = rx
+                        downY = ry
+                        curX = rx
+                        curY = ry
+                        isDraggingBox = false
+                        return true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        curX = rx
+                        curY = ry
+                        if (!isDraggingBox && (abs(curX - downX) > slop || abs(curY - downY) > slop)) {
+                            isDraggingBox = true
+                        }
+                        if (isDraggingBox) {
+                            val left = min(downX, curX).roundToInt()
+                            val top = min(downY, curY).roundToInt()
+                            val right = max(downX, curX).roundToInt()
+                            val bottom = max(downY, curY).roundToInt()
+                            val dragRect = Rect(left, top, right, bottom)
+                            selectedRect = dragRect
+                            val matchedTexts = candidates
+                                .filter { Rect.intersects(it.bounds, dragRect) }
+                                .map { it.text }
+                                .distinct()
+                            if (matchedTexts.isNotEmpty()) {
+                                textInput.setText(matchedTexts.first())
+                            }
+                            cropImageBtn?.visibility = if (dragRect.width() >= 24 && dragRect.height() >= 24) {
+                                VISIBLE
+                            } else {
+                                GONE
+                            }
+                            invalidate()
+                        }
+                        return true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (!isDraggingBox) {
+                            val tapX = rx.roundToInt()
+                            val tapY = ry.roundToInt()
+                            val hit = candidates.firstOrNull { it.bounds.contains(tapX, tapY) }
+                            if (hit != null) {
+                                selectedRect = Rect(hit.bounds)
+                                textInput.setText(hit.text)
+                                cropImageBtn?.visibility = VISIBLE
+                                invalidate()
+                            }
+                        }
+                        isDraggingBox = false
+                        return true
+                    }
+                }
+                return true
+            }
+        }
+
+        root.addView(
+            canvasOverlay,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val bottomCard = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = context.dpToPxInt(16f)
+            setPadding(p, p, p, p)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = context.dpToPx(22f)
+                setColor(bgColor)
+                setStroke(context.dpToPxInt(1.2f), emerald)
+            }
+            elevation = context.dpToPx(10f)
+            setOnClickListener { /* consume */ }
+        }
+
+        bottomCard.addView(TextView(context).apply {
+            text = if (resumeAfterSave) {
+                "감지할 부분 선택 (#${step.order} 단계)"
+            } else {
+                "화면에서 감지할 부분 선택"
+            }
+            setTextColor(textPrimary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        })
+        bottomCard.addView(TextView(context).apply {
+            text = "화면의 파란 글자 박스를 터치하거나 영역을 드래그해 선택하세요."
+            setTextColor(textSecondary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(8f))
+        })
+
+        if (candidates.isNotEmpty()) {
+            val hScroll = HorizontalScrollView(context).apply {
+                isHorizontalScrollBarEnabled = false
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = context.dpToPxInt(8f) }
+            }
+            val chipRow = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            candidates.map { it.text }.distinct().take(12).forEach { candText ->
+                val chip = createPillChip(
+                    context = context,
+                    label = candText.take(18),
+                    selected = false,
+                    inactiveBg = cardSurface,
+                    inactiveText = textPrimary,
+                    activeBg = primaryBlue
+                ).apply {
+                    val padH = context.dpToPxInt(10f)
+                    val padV = context.dpToPxInt(6f)
+                    setPadding(padH, padV, padH, padV)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { marginEnd = context.dpToPxInt(6f) }
+                    setOnClickListener {
+                        textInput.setText(candText)
+                        candidates.firstOrNull { it.text == candText }?.let {
+                            selectedRect = Rect(it.bounds)
+                            cropImageBtn?.visibility = View.VISIBLE
+                            canvasOverlay.invalidate()
+                        }
+                    }
+                }
+                chipRow.addView(chip)
+            }
+            hScroll.addView(chipRow)
+            bottomCard.addView(hScroll)
+        }
+
+        bottomCard.addView(textInput.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                context.dpToPxInt(42f)
+            ).apply { bottomMargin = context.dpToPxInt(8f) }
+        })
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val imgBtn = createActionButton(
+                context = context,
+                label = if (resumeAfterSave) "선택 영역을 이미지로 저장 후 계속 실행" else "선택 영역을 감지 이미지로 저장",
+                bgColor = Color.parseColor("#7C5CFF"),
+                textColor = Color.WHITE
+            ).apply {
+                visibility = View.GONE
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    context.dpToPxInt(40f)
+                ).apply { bottomMargin = context.dpToPxInt(8f) }
+                setOnClickListener {
+                    val rect = selectedRect
+                    if (rect != null && rect.width() >= 16 && rect.height() >= 16) {
+                        onSaveCropRect(rect)
+                    }
+                }
+            }
+            cropImageBtn = imgBtn
+            bottomCard.addView(imgBtn)
+        }
+
+        val btnRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        val cancelBtn = createActionButton(context, "취소", cardSurface, textPrimary).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(42f), 0.8f).apply {
+                marginEnd = context.dpToPxInt(6f)
+            }
+            setOnClickListener { onCancel() }
+        }
+        val saveTextBtn = createActionButton(
+            context = context,
+            label = if (resumeAfterSave) "텍스트 저장 후 실행" else "감지 텍스트 저장",
+            bgColor = emerald,
+            textColor = Color.WHITE
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(42f), 1.4f)
+            setOnClickListener {
+                val chosen = textInput.text.toString().trim()
+                if (chosen.isNotEmpty()) {
+                    onSaveText(chosen)
+                } else {
+                    textInput.hint = "감지할 글자를 선택하거나 입력해 주세요!"
+                }
+            }
+        }
+        btnRow.addView(cancelBtn)
+        btnRow.addView(saveTextBtn)
+        bottomCard.addView(btnRow)
+
+        root.addView(
+            bottomCard,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
+            ).apply {
+                val m = context.dpToPxInt(14f)
+                setMargins(m, m, m, context.dpToPxInt(28f))
+            }
+        )
+        return root
+    }
 }
