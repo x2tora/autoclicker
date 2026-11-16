@@ -279,6 +279,40 @@ class ClickEngineCalculatorTest {
             mixedScreen, screenW, screenH, lightButtonWithText, tplW, tplH
         )
         assertTrue("Expected real noisy button to score >= 85, got $realMatchScore", realMatchScore >= 85)
+
+        // Circular/pill UI crop with animated background around outer edges must match even when background changes
+        val cropW = 30
+        val cropH = 26
+        val userCropWithBlueBg = IntArray(cropW * cropH) { 0xFF88CCFF.toInt() }
+        for (y in 4 until 22) {
+            for (x in 4 until 26) {
+                userCropWithBlueBg[y * cropW + x] = 0xFFF4F4F8.toInt()
+            }
+        }
+        for (x in 8 until 22) {
+            userCropWithBlueBg[12 * cropW + x] = 0xFF3E4159.toInt()
+            userCropWithBlueBg[13 * cropW + x] = 0xFF3E4159.toInt()
+        }
+
+        // On live screen, background outside the pill is now dark purple instead of blue
+        val liveScreenW = 60
+        val liveScreenH = 50
+        val liveScreenWithPurpleBg = IntArray(liveScreenW * liveScreenH) { 0xFF3A1C71.toInt() }
+        for (y in 4 until 22) {
+            for (x in 4 until 26) {
+                liveScreenWithPurpleBg[(10 + y) * liveScreenW + (15 + x)] = 0xFFF4F4F8.toInt()
+            }
+        }
+        for (x in 8 until 22) {
+            liveScreenWithPurpleBg[(10 + 12) * liveScreenW + (15 + x)] = 0xFF3E4159.toInt()
+            liveScreenWithPurpleBg[(10 + 13) * liveScreenW + (15 + x)] = 0xFF3E4159.toInt()
+        }
+
+        val core = ScreenDetector.extractInnerCorePatch(userCropWithBlueBg, cropW, cropH)
+        val coreScore = ScreenDetector.computeTemplateMatchScore(
+            liveScreenWithPurpleBg, liveScreenW, liveScreenH, core.pixels, core.width, core.height
+        )
+        assertTrue("Expected inner-core match >= 90 despite background change, got $coreScore", coreScore >= 90)
     }
 
     @Test

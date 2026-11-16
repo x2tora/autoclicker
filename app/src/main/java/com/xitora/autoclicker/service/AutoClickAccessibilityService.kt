@@ -458,11 +458,16 @@ class AutoClickAccessibilityService : AccessibilityService() {
             },
             onSaveCropRect = { cropRect ->
                 serviceScope.launch {
-                    delay(120L)
-                    val savedPath = ScreenDetector.captureAndCropTemplateImage(
-                        service = this@AutoClickAccessibilityService,
-                        cropRect = cropRect
-                    )
+                    overlayController.setAllOverlaysTemporarilyHidden(true)
+                    delay(180L)
+                    val savedPath = try {
+                        ScreenDetector.captureAndCropTemplateImage(
+                            service = this@AutoClickAccessibilityService,
+                            cropRect = cropRect
+                        )
+                    } finally {
+                        overlayController.setAllOverlaysTemporarilyHidden(false)
+                    }
                     if (savedPath != null) {
                         stateHolder.updateScenarioStep(
                             step.copy(

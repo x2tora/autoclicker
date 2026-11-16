@@ -33,13 +33,18 @@ import kotlin.math.roundToInt
 object ScreenDetector {
     private const val MAX_TRAVERSED_NODES = 1500
     private const val MAX_SAVED_IMAGE_DIM = 1080
-    private const val MATCH_SCALE = 0.40f
+    private const val MATCH_SCALE = 0.38f
+    private val MULTI_SCALES = floatArrayOf(1.0f, 0.88f, 1.12f, 0.75f, 1.28f, 0.62f, 1.45f)
 
-    private data class CachedTemplate(
-        val key: String,
+    data class TemplatePatch(
         val width: Int,
         val height: Int,
         val pixels: IntArray
+    )
+
+    private data class CachedTemplateSet(
+        val key: String,
+        val variants: List<TemplatePatch>
     )
 
     data class ScreenTextCandidate(
@@ -48,7 +53,7 @@ object ScreenDetector {
     )
 
     @Volatile
-    private var cachedTemplate: CachedTemplate? = null
+    private var cachedTemplateSet: CachedTemplateSet? = null
 
     fun hasValidDetectionTarget(step: ScenarioStep): Boolean {
         return when (step.conditionType) {
@@ -257,46 +262,78 @@ object ScreenDetector {
                 scaledScreen.getPixels(screenPixels, 0, sw, 0, 0, sw, sh)
                 if (scaledScreen !== screenBmp) scaledScreen.recycle()
 
-                val tpl = loadScaledTemplate(file, sw, sh) ?: return@withContext false
-                val score = computeTemplateMatchScore(
-                    screenPixels = screenPixels,
-                    screenW = sw,
-                    screenH = sh,
-                    tplPixels = tpl.pixels,
-                    tplW = tpl.width,
-                    tplH = tpl.height,
-                    stride = 1
-                )
-                score >= threshold
+                val variants = loadScaledTemplateVariants(file, sw, sh)
+                if (variants.isEmpty()) return@withContext false
+
+                var bestScore = 0
+                for (tpl in variants) {
+                    val score = computeTemplateMatchScore(
+                        screenPixels = screenPixels,
+                        screenW = sw,
+                        screenH = sh,
+                        tplPixels = tpl.pixels,
+                        tplW = tpl.width,
+                        tplH = tpl.height,
+                        stride = 1
+                    )
+                    if (score > bestScore) {
+                        bestScore = score
+                    }
+                    if (bestScore >= threshold + 4) break
+                }
+                bestScore >= threshold
             } finally {
                 screenBmp.recycle()
             }
         }
     }
 
-    private fun loadScaledTemplate(file: File, maxW: Int, maxH: Int): CachedTemplate? {
-        val key = "${file.absolutePath}:${file.lastModified()}:${maxW}x$maxH"
-        cachedTemplate?.takeIf { it.key == key }?.let { return it }
-
-        val raw = BitmapFactory.decodeFile(file.absolutePath) ?: return null
-        val desiredW = (raw.width * MATCH_SCALE).roundToInt().coerceAtLeast(4)
-        val desiredH = (raw.height * MATCH_SCALE).roundToInt().coerceAtLeast(4)
-        val fitScale = min(
-            1f,
-            min(maxW.toFloat() / desiredW.toFloat(), maxH.toFloat() / desiredH.toFloat())
-        )
-        val finalW = (desiredW * fitScale).roundToInt().coerceAtLeast(4).coerceAtMost(maxW)
-        val finalH = (desiredH * fitScale).roundToInt().coerceAtLeast(4).coerceAtMost(maxH)
-
-        val scaled = Bitmap.createScaledBitmap(raw, finalW, finalH, true)
-        val pixels = IntArray(finalW * finalH)
-        scaled.getPixels(pixels, 0, finalW, 0, 0, finalW, finalH)
-        if (scaled !== raw) scaled.recycle()
-        raw.recycle()
-
-        return CachedTemplate(key = key, width = finalW, height = finalH, pixels = pixels).also {
-            cachedTemplate = it
+    /**
+     * Crops out the outer margin of a rectangular user screenshot (where animated backgrounds
+     * around circular buttons or pill banners live) so matching focuses on the invariant inner icon/text core.
+     */
+    fun extractInnerCorePatch(pixels: IntArray, width: Int, height: Int): TemplatePatch {
+        if (width < 20 || height < 20) {
+            return TemplatePatch(width, height, pixels)
         }
+        val trimX = (width * 0.17f).roundToInt().coerceAtLeast(2)
+        val trimY = (height * 0.20f).roundToInt().coerceAtLeast(2)
+        val newW = (width - trimX * 2).coerceAtLeast(8)
+        val newH = (height - trimY * 2).coerceAtLeast(8)
+        val out = IntArray(newW * newH)
+        for (y in 0 until newH) {
+            System.arraycopy(pixels, (y + trimY) * width + trimX, out, y * newW, newW)
+        }
+        return TemplatePatch(newW, newH, out)
+    }
+
+    private fun loadScaledTemplateVariants(file: File, maxW: Int, maxH: Int): List<TemplatePatch> {
+        val key = "${file.absolutePath}:${file.lastModified()}:${maxW}x$maxH"
+        cachedTemplateSet?.takeIf { it.key == key }?.let { return it.variants }
+
+        val raw = BitmapFactory.decodeFile(file.absolutePath) ?: return emptyList()
+        val variants = mutableListOf<TemplatePatch>()
+        try {
+            for (scaleFactor in MULTI_SCALES) {
+                val desiredW = (raw.width * MATCH_SCALE * scaleFactor).roundToInt().coerceAtLeast(8)
+                val desiredH = (raw.height * MATCH_SCALE * scaleFactor).roundToInt().coerceAtLeast(8)
+                if (desiredW > maxW || desiredH > maxH) continue
+
+                val scaled = Bitmap.createScaledBitmap(raw, desiredW, desiredH, true)
+                val pixels = IntArray(desiredW * desiredH)
+                scaled.getPixels(pixels, 0, desiredW, 0, 0, desiredW, desiredH)
+                if (scaled !== raw) scaled.recycle()
+
+                // Add inner core patch (ignores outer background corners around circles/pills)
+                val core = extractInnerCorePatch(pixels, desiredW, desiredH)
+                variants.add(core)
+            }
+        } finally {
+            raw.recycle()
+        }
+
+        cachedTemplateSet = CachedTemplateSet(key = key, variants = variants)
+        return variants
     }
 
     private suspend fun captureSoftwareScreenBitmap(service: AccessibilityService): Bitmap? {

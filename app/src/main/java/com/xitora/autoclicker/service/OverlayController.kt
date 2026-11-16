@@ -283,10 +283,21 @@ class OverlayController(
     }
 
     fun setTargetsTouchThrough(touchThrough: Boolean) {
+        val hideReticlesForCapture = touchThrough &&
+            stateHolder.runtime.value.activeMode == ClickMode.SCENARIO
         targetHolders.forEach { holder ->
             holder.view.isLockedForClicking = touchThrough
+            holder.view.alpha = if (hideReticlesForCapture) 0f else 1f
             holder.params.flags = baseTargetFlags(touchThrough)
             runCatching { windowManager.updateViewLayout(holder.view, holder.params) }
+        }
+    }
+
+    fun setAllOverlaysTemporarilyHidden(hidden: Boolean) {
+        val alphaVal = if (hidden) 0f else 1f
+        controlPanelView?.alpha = alphaVal
+        targetHolders.forEach { holder ->
+            holder.view.alpha = alphaVal
         }
     }
 
