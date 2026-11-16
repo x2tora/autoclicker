@@ -223,6 +223,20 @@ class AutoClickerStateHolder private constructor(context: Context) {
         }
     }
 
+    fun exportSinglePresetJson(presetId: String): String? {
+        val target = _state.value.presets.firstOrNull { it.id == presetId } ?: return null
+        return repository.exportSinglePresetJson(target)
+    }
+
+    fun importSinglePresetJson(rawJson: String): Result<ClickPreset> {
+        return repository.importSinglePresetJson(rawJson).map { imported ->
+            commit { s ->
+                s.copy(presets = listOf(imported) + s.presets)
+            }
+            imported
+        }
+    }
+
     fun applyPreset(preset: ClickPreset) {
         commit { s ->
             when (preset.mode) {

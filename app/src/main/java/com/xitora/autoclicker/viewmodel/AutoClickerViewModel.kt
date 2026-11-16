@@ -131,6 +131,10 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun applyPreset(preset: ClickPreset) = stateHolder.applyPreset(preset)
 
+    fun exportSinglePresetJson(presetId: String): String? = stateHolder.exportSinglePresetJson(presetId)
+
+    fun importSinglePresetJson(rawJson: String): Result<ClickPreset> = stateHolder.importSinglePresetJson(rawJson)
+
     fun updateTheme(option: ThemeOption) = stateHolder.updateSettings { it.copy(themeOption = option) }
 
     fun updateThemeColorStyle(style: ThemeColorStyle) =

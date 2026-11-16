@@ -384,7 +384,11 @@ private fun MainTabsHost(
                                     notify("프리셋을 삭제했습니다.")
                                 },
                                 onSaveCurrentSingle = { presetSaveMode = ClickMode.SINGLE },
-                                onSaveCurrentMulti = { presetSaveMode = ClickMode.MULTI }
+                                onSaveCurrentMulti = { presetSaveMode = ClickMode.MULTI },
+                                onSaveCurrentScenario = { presetSaveMode = ClickMode.SCENARIO },
+                                onExportPreset = viewModel::exportSinglePresetJson,
+                                onImportPreset = viewModel::importSinglePresetJson,
+                                onNotify = notify
                             )
                             2 -> TouchTestScreen(
                                 scrollBehavior = scrollBehavior,

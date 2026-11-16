@@ -1,5 +1,6 @@
 package com.xitora.autoclicker
 
+import com.xitora.autoclicker.data.AutoClickerRepository
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.domain.ScenarioDetectGuard
 import com.xitora.autoclicker.model.*
@@ -266,5 +267,29 @@ class ClickEngineCalculatorTest {
 
         // New text appears after tapping -> triggers stop of repeat-tap step
         assertTrue(guard.onConditionEvaluated(isPresent = true, tapsInStep = 3))
+    }
+
+    @Test
+    fun `single preset export and import creates fresh id and rejects full backup json`() {
+        val original = ClickPreset(
+            id = "preset-orig-id",
+            name = "공유용 시나리오",
+            mode = ClickMode.SCENARIO,
+            timing = ClickTimingConfig(repeatMode = RepeatMode.COUNT, repeatCount = 5),
+            targets = emptyList(),
+            scenarioSteps = defaultScenarioSteps()
+        )
+        val json = AutoClickerRepository.encodeSinglePresetJson(original)
+        val imported = AutoClickerRepository.parseSinglePresetJson(json).getOrThrow()
+
+        assertNotEquals(original.id, imported.id)
+        assertEquals(original.name, imported.name)
+        assertEquals(ClickMode.SCENARIO, imported.mode)
+        assertEquals(8, imported.scenarioSteps.size)
+        assertEquals(5, imported.timing.repeatCount)
+
+        // Full backup JSON should be rejected cleanly by single preset importer
+        val invalidResult = AutoClickerRepository.parseSinglePresetJson("""{"singleConfig":{},"presets":[]}""")
+        assertTrue(invalidResult.isFailure)
     }
 }
