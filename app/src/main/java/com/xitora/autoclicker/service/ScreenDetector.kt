@@ -33,7 +33,7 @@ import kotlin.math.roundToInt
 object ScreenDetector {
     private const val MAX_TRAVERSED_NODES = 1500
     private const val MAX_SAVED_IMAGE_DIM = 1080
-    private const val MATCH_SCALE = 0.35f
+    private const val MATCH_SCALE = 0.40f
 
     private data class CachedTemplate(
         val key: String,
@@ -265,7 +265,7 @@ object ScreenDetector {
                     tplPixels = tpl.pixels,
                     tplW = tpl.width,
                     tplH = tpl.height,
-                    stride = 3
+                    stride = 1
                 )
                 score >= threshold
             } finally {
@@ -339,7 +339,7 @@ object ScreenDetector {
         tplPixels: IntArray,
         tplW: Int,
         tplH: Int,
-        stride: Int = 3
+        stride: Int = 1
     ): Int {
         if (screenW <= 0 || screenH <= 0 || tplW <= 0 || tplH <= 0) return 0
         if (tplW > screenW || tplH > screenH) return 0
@@ -373,34 +373,99 @@ object ScreenDetector {
         val maxY = screenH - tplH
         val coarseStep = stride.coerceAtLeast(1)
 
-        var bestCoarseX = 0
-        var bestCoarseY = 0
-        var bestCoarseDiff = Long.MAX_VALUE
+        // Precompute template luminance mean & variance to reject flat screen patches early
+        var tplSum = 0.0
+        val tplLums = DoubleArray(sampleCount)
+        for (i in 0 until sampleCount) {
+            val t = sampleRgb[i]
+            val lum = ((t shr 16) and 0xFF) * 0.299 + ((t shr 8) and 0xFF) * 0.587 + (t and 0xFF) * 0.114
+            tplLums[i] = lum
+            tplSum += lum
+        }
+        val tplMean = tplSum / sampleCount
+        var tplVar = 0.0
+        for (i in 0 until sampleCount) {
+            val d = tplLums[i] - tplMean
+            tplVar += d * d
+        }
+        val tplHasStructure = (tplVar / sampleCount) >= 12.0
+
+        // Keep top 4 spatially distinct coarse candidates so a single flat patch never hides the real match
+        val topK = 4
+        val topX = IntArray(topK)
+        val topY = IntArray(topK)
+        val topDiff = LongArray(topK) { Long.MAX_VALUE }
+        val minSep = max(coarseStep * 2, min(tplW, tplH) / 2)
 
         var y = 0
         while (y <= maxY) {
             var x = 0
             while (x <= maxX) {
                 var diff = 0L
+                var minLum = 255.0
+                var maxLum = 0.0
+                val worstTopDiff = topDiff[topK - 1]
                 for (i in 0 until sampleCount) {
                     val s = screenPixels[(y + sampleY[i]) * screenW + (x + sampleX[i])]
+                    val sr = (s shr 16) and 0xFF
+                    val sg = (s shr 8) and 0xFF
+                    val sb = s and 0xFF
+                    if (tplHasStructure) {
+                        val sLum = sr * 0.299 + sg * 0.587 + sb * 0.114
+                        if (sLum < minLum) minLum = sLum
+                        if (sLum > maxLum) maxLum = sLum
+                    }
                     val t = sampleRgb[i]
-                    diff += abs(((s shr 16) and 0xFF) - ((t shr 16) and 0xFF)) +
-                        abs(((s shr 8) and 0xFF) - ((t shr 8) and 0xFF)) +
-                        abs((s and 0xFF) - (t and 0xFF))
-                    if (diff >= bestCoarseDiff) break
+                    diff += abs(sr - ((t shr 16) and 0xFF)) +
+                        abs(sg - ((t shr 8) and 0xFF)) +
+                        abs(sb - (t and 0xFF))
+                    if (diff >= worstTopDiff) break
                 }
-                if (diff < bestCoarseDiff) {
-                    bestCoarseDiff = diff
-                    bestCoarseX = x
-                    bestCoarseY = y
+
+                // Skip completely flat screen regions when the template contains text/icon contrast
+                if (tplHasStructure && (maxLum - minLum) < 10.0) {
+                    x += coarseStep
+                    continue
+                }
+
+                if (diff < topDiff[topK - 1]) {
+                    var replaced = false
+                    for (k in 0 until topK) {
+                        if (topDiff[k] < Long.MAX_VALUE &&
+                            abs(topX[k] - x) < minSep &&
+                            abs(topY[k] - y) < minSep
+                        ) {
+                            if (diff < topDiff[k]) {
+                                topDiff[k] = diff
+                                topX[k] = x
+                                topY[k] = y
+                            }
+                            replaced = true
+                            break
+                        }
+                    }
+                    if (!replaced) {
+                        topDiff[topK - 1] = diff
+                        topX[topK - 1] = x
+                        topY[topK - 1] = y
+                    }
+                    // Keep topDiff sorted ascending
+                    for (i in 0 until topK - 1) {
+                        for (j in i + 1 until topK) {
+                            if (topDiff[j] < topDiff[i]) {
+                                val td = topDiff[i]; topDiff[i] = topDiff[j]; topDiff[j] = td
+                                val tx = topX[i]; topX[i] = topX[j]; topX[j] = tx
+                                val ty2 = topY[i]; topY[i] = topY[j]; topY[j] = ty2
+                            }
+                        }
+                    }
                 }
                 x += coarseStep
             }
             y += coarseStep
         }
 
-        // Local 1px refinement around the coarse winner using denser sampling
+        // Local 1px refinement across all top coarse candidates using denser sampling
         val fineStep = if (tplW * tplH <= 2400) 1 else 2
         val fineXList = mutableListOf<Int>()
         val fineYList = mutableListOf<Int>()
@@ -423,70 +488,78 @@ object ScreenDetector {
         val fineX = fineXList.toIntArray()
         val fineY = fineYList.toIntArray()
         val fineRgb = fineColors.toIntArray()
+        val maxPossibleDiff = fineCount.toLong() * 3L * 255L
+        if (maxPossibleDiff <= 0L) return 0
 
-        var bestFineX = bestCoarseX
-        var bestFineY = bestCoarseY
-        var bestFineDiff = Long.MAX_VALUE
-        val minRefineX = (bestCoarseX - coarseStep).coerceAtLeast(0)
-        val maxRefineX = (bestCoarseX + coarseStep).coerceAtMost(maxX)
-        val minRefineY = (bestCoarseY - coarseStep).coerceAtLeast(0)
-        val maxRefineY = (bestCoarseY + coarseStep).coerceAtMost(maxY)
+        var bestOverallScore = 0
+        for (k in 0 until topK) {
+            if (topDiff[k] == Long.MAX_VALUE) continue
+            var bestFineX = topX[k]
+            var bestFineY = topY[k]
+            var bestFineDiff = Long.MAX_VALUE
+            val minRefineX = (topX[k] - coarseStep).coerceAtLeast(0)
+            val maxRefineX = (topX[k] + coarseStep).coerceAtMost(maxX)
+            val minRefineY = (topY[k] - coarseStep).coerceAtLeast(0)
+            val maxRefineY = (topY[k] + coarseStep).coerceAtMost(maxY)
 
-        for (ry in minRefineY..maxRefineY) {
-            for (rx in minRefineX..maxRefineX) {
-                var diff = 0L
-                for (i in 0 until fineCount) {
-                    val s = screenPixels[(ry + fineY[i]) * screenW + (rx + fineX[i])]
-                    val t = fineRgb[i]
-                    diff += abs(((s shr 16) and 0xFF) - ((t shr 16) and 0xFF)) +
-                        abs(((s shr 8) and 0xFF) - ((t shr 8) and 0xFF)) +
-                        abs((s and 0xFF) - (t and 0xFF))
-                    if (diff >= bestFineDiff) break
-                }
-                if (diff < bestFineDiff) {
-                    bestFineDiff = diff
-                    bestFineX = rx
-                    bestFineY = ry
+            for (ry in minRefineY..maxRefineY) {
+                for (rx in minRefineX..maxRefineX) {
+                    var diff = 0L
+                    for (i in 0 until fineCount) {
+                        val s = screenPixels[(ry + fineY[i]) * screenW + (rx + fineX[i])]
+                        val t = fineRgb[i]
+                        diff += abs(((s shr 16) and 0xFF) - ((t shr 16) and 0xFF)) +
+                            abs(((s shr 8) and 0xFF) - ((t shr 8) and 0xFF)) +
+                            abs((s and 0xFF) - (t and 0xFF))
+                        if (diff >= bestFineDiff) break
+                    }
+                    if (diff < bestFineDiff) {
+                        bestFineDiff = diff
+                        bestFineX = rx
+                        bestFineY = ry
+                    }
                 }
             }
-        }
 
-        val maxPossibleDiff = fineCount.toLong() * 3L * 255L
-        if (maxPossibleDiff <= 0L || bestFineDiff == Long.MAX_VALUE) return 0
-        val errorPct = (bestFineDiff * 100L) / maxPossibleDiff
-        val l1Score = (100L - errorPct).toInt().coerceIn(0, 100)
+            if (bestFineDiff == Long.MAX_VALUE) continue
+            val errorPct = (bestFineDiff * 100L) / maxPossibleDiff
+            val l1Score = (100L - errorPct).toInt().coerceIn(0, 100)
 
-        // Structural ZNCC check prevents plain/solid backgrounds from falsely scoring 85%+ against UI buttons with text.
-        var sumT = 0.0
-        var sumS = 0.0
-        for (i in 0 until fineCount) {
-            val t = fineRgb[i]
-            val s = screenPixels[(bestFineY + fineY[i]) * screenW + (bestFineX + fineX[i])]
-            sumT += ((t shr 16) and 0xFF) * 0.299 + ((t shr 8) and 0xFF) * 0.587 + (t and 0xFF) * 0.114
-            sumS += ((s shr 16) and 0xFF) * 0.299 + ((s shr 8) and 0xFF) * 0.587 + (s and 0xFF) * 0.114
+            var sumT = 0.0
+            var sumS = 0.0
+            for (i in 0 until fineCount) {
+                val t = fineRgb[i]
+                val s = screenPixels[(bestFineY + fineY[i]) * screenW + (bestFineX + fineX[i])]
+                sumT += ((t shr 16) and 0xFF) * 0.299 + ((t shr 8) and 0xFF) * 0.587 + (t and 0xFF) * 0.114
+                sumS += ((s shr 16) and 0xFF) * 0.299 + ((s shr 8) and 0xFF) * 0.587 + (s and 0xFF) * 0.114
+            }
+            val meanT = sumT / fineCount
+            val meanS = sumS / fineCount
+            var num = 0.0
+            var varT = 0.0
+            var varS = 0.0
+            for (i in 0 until fineCount) {
+                val t = fineRgb[i]
+                val s = screenPixels[(bestFineY + fineY[i]) * screenW + (bestFineX + fineX[i])]
+                val lumT = ((t shr 16) and 0xFF) * 0.299 + ((t shr 8) and 0xFF) * 0.587 + (t and 0xFF) * 0.114 - meanT
+                val lumS = ((s shr 16) and 0xFF) * 0.299 + ((s shr 8) and 0xFF) * 0.587 + (s and 0xFF) * 0.114 - meanS
+                num += lumT * lumS
+                varT += lumT * lumT
+                varS += lumS * lumS
+            }
+            val candidateScore = if (varT < 1.0) {
+                l1Score
+            } else if (varS < 1.0) {
+                0
+            } else {
+                val zncc = (num / kotlin.math.sqrt(varT * varS)).coerceIn(0.0, 1.0)
+                val znccPct = (zncc * 100.0).roundToInt().coerceIn(0, 100)
+                if (znccPct < 45) 0 else ((l1Score * 0.45) + (znccPct * 0.55)).roundToInt().coerceIn(0, 100)
+            }
+            if (candidateScore > bestOverallScore) {
+                bestOverallScore = candidateScore
+            }
         }
-        val meanT = sumT / fineCount
-        val meanS = sumS / fineCount
-        var num = 0.0
-        var varT = 0.0
-        var varS = 0.0
-        for (i in 0 until fineCount) {
-            val t = fineRgb[i]
-            val s = screenPixels[(bestFineY + fineY[i]) * screenW + (bestFineX + fineX[i])]
-            val lumT = ((t shr 16) and 0xFF) * 0.299 + ((t shr 8) and 0xFF) * 0.587 + (t and 0xFF) * 0.114 - meanT
-            val lumS = ((s shr 16) and 0xFF) * 0.299 + ((s shr 8) and 0xFF) * 0.587 + (s and 0xFF) * 0.114 - meanS
-            num += lumT * lumS
-            varT += lumT * lumT
-            varS += lumS * lumS
-        }
-        if (varT < 1.0) {
-            return l1Score
-        }
-        if (varS < 1.0) {
-            return 0
-        }
-        val zncc = (num / kotlin.math.sqrt(varT * varS)).coerceIn(0.0, 1.0)
-        val znccPct = (zncc * 100.0).roundToInt().coerceIn(0, 100)
-        return min(l1Score, znccPct)
+        return bestOverallScore
     }
 }

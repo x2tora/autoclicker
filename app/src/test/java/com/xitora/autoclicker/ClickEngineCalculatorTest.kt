@@ -262,6 +262,23 @@ class ClickEngineCalculatorTest {
             plainWhiteScreen, screenW, screenH, lightButtonWithText, tplW, tplH
         )
         assertTrue("Expected structural mismatch on plain screen, got $falsePositiveScore", falsePositiveScore < 50)
+
+        // Real slightly-noisy button placed alongside a plain white background must still score >= 85
+        val mixedScreen = IntArray(screenW * screenH) { 0xFFFFFFFF.toInt() }
+        for (y in 0 until tplH) {
+            for (x in 0 until tplW) {
+                val orig = lightButtonWithText[y * tplW + x]
+                // Shift brightness slightly (-12 per channel) to simulate compression/resampling noise
+                val r = (((orig shr 16) and 0xFF) - 12).coerceIn(0, 255)
+                val g = (((orig shr 8) and 0xFF) - 12).coerceIn(0, 255)
+                val b = ((orig and 0xFF) - 12).coerceIn(0, 255)
+                mixedScreen[(19 + y) * screenW + (17 + x)] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+            }
+        }
+        val realMatchScore = ScreenDetector.computeTemplateMatchScore(
+            mixedScreen, screenW, screenH, lightButtonWithText, tplW, tplH
+        )
+        assertTrue("Expected real noisy button to score >= 85, got $realMatchScore", realMatchScore >= 85)
     }
 
     @Test
