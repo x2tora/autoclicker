@@ -388,14 +388,14 @@ class FloatingControlPanelView(
 
         val bg = background as? GradientDrawable
         if (isDarkSurface) {
-            bg?.setColor(Color.argb(242, 32, 36, 44))
-            bg?.setStroke(context.dpToPxInt(1f), Color.argb(65, 255, 255, 255))
-            val labelCol = Color.parseColor("#DDE7F2")
+            bg?.setColor(Color.argb(244, 28, 28, 30))
+            bg?.setStroke(context.dpToPxInt(1f), Color.argb(46, 255, 255, 255))
+            val labelCol = Color.parseColor("#E5E5EA")
             elapsedLabel.setTextColor(labelCol)
             repeatLabel.setTextColor(labelCol)
             countLabel.setTextColor(labelCol)
-            closeBtn.customTint = Color.parseColor("#9CC2E6")
-            settingsBtn.customTint = Color.parseColor("#9CC2E6")
+            closeBtn.customTint = Color.parseColor("#B4B4BC")
+            settingsBtn.customTint = Color.parseColor("#B4B4BC")
         } else {
             bg?.setColor(Color.argb(246, 250, 251, 253))
             bg?.setStroke(context.dpToPxInt(1f), Color.argb(32, 36, 82, 122))
@@ -600,10 +600,10 @@ object OverlayModalFactory {
         onCancel: () -> Unit,
         onSave: (ClickTimingConfig) -> Unit
     ): View {
-        val bgColor = if (isDark) Color.parseColor("#1E2128") else Color.parseColor("#FFFFFF")
-        val cardSurface = if (isDark) Color.parseColor("#272B35") else Color.parseColor("#F4F6FA")
-        val textPrimary = if (isDark) Color.parseColor("#F1F4FA") else Color.parseColor("#181C24")
-        val textSecondary = if (isDark) Color.parseColor("#9AA3B5") else Color.parseColor("#636D7E")
+        val bgColor = if (isDark) Color.parseColor("#1C1C1E") else Color.parseColor("#FFFFFF")
+        val cardSurface = if (isDark) Color.parseColor("#262629") else Color.parseColor("#F4F6FA")
+        val textPrimary = if (isDark) Color.parseColor("#F2F2F5") else Color.parseColor("#181C24")
+        val textSecondary = if (isDark) Color.parseColor("#9A9AA0") else Color.parseColor("#636D7E")
         val primaryBlue = Color.parseColor("#3482FF")
         val dangerRed = Color.parseColor("#E05263")
 
@@ -629,7 +629,7 @@ object OverlayModalFactory {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = context.dpToPx(24f)
                 setColor(bgColor)
-                setStroke(context.dpToPxInt(1f), Color.argb(35, 130, 145, 170))
+                setStroke(context.dpToPxInt(1f), if (isDark) Color.argb(42, 255, 255, 255) else Color.argb(30, 0, 0, 0))
             }
             setOnClickListener { /* consume */ }
         }
@@ -1020,12 +1020,11 @@ object OverlayModalFactory {
         onCancel: () -> Unit,
         onSave: (ScenarioStep) -> Unit
     ): View {
-        val bgColor = if (isDark) Color.parseColor("#1E2128") else Color.parseColor("#FFFFFF")
-        val cardSurface = if (isDark) Color.parseColor("#272B35") else Color.parseColor("#F4F6FA")
-        val textPrimary = if (isDark) Color.parseColor("#F1F4FA") else Color.parseColor("#181C24")
-        val textSecondary = if (isDark) Color.parseColor("#9AA3B5") else Color.parseColor("#636D7E")
+        val bgColor = if (isDark) Color.parseColor("#1C1C1E") else Color.parseColor("#FFFFFF")
+        val cardSurface = if (isDark) Color.parseColor("#262629") else Color.parseColor("#F4F6FA")
+        val textPrimary = if (isDark) Color.parseColor("#F2F2F5") else Color.parseColor("#181C24")
+        val textSecondary = if (isDark) Color.parseColor("#9A9AA0") else Color.parseColor("#636D7E")
         val primaryBlue = Color.parseColor("#3482FF")
-        val accentPurple = Color.parseColor("#7C5CFF")
         val dangerRed = Color.parseColor("#E05263")
 
         val backdrop = FrameLayout(context).apply {
@@ -1041,7 +1040,7 @@ object OverlayModalFactory {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = context.dpToPx(24f)
                 setColor(bgColor)
-                setStroke(context.dpToPxInt(1f), Color.argb(35, 130, 145, 170))
+                setStroke(context.dpToPxInt(1f), if (isDark) Color.argb(42, 255, 255, 255) else Color.argb(30, 0, 0, 0))
             }
             setOnClickListener { /* consume */ }
         }
@@ -1071,14 +1070,6 @@ object OverlayModalFactory {
         }
 
         var selectedScrollDir = step.scrollDirection
-        val targetTextInput = createTextEditText(
-            context = context,
-            initialText = step.targetText,
-            hintText = "감지할 글자 입력 (예: 완료|확인)",
-            bgCol = cardSurface,
-            textColor = textPrimary,
-            hintColor = textSecondary
-        )
         val repeatIntervalInput = createNumericEditText(context, step.repeatIntervalMs.toString(), cardSurface, textPrimary)
         val tapDurationInput = createNumericEditText(context, step.tapDurationMs.toString(), cardSurface, textPrimary)
         val scrollDistInput = createNumericEditText(context, step.scrollDistanceDp.toString(), cardSurface, textPrimary)
@@ -1087,18 +1078,22 @@ object OverlayModalFactory {
 
         when (step.type) {
             ScenarioStepType.REPEAT_UNTIL_DETECT -> {
-                body.addView(makeSectionLabel(context, "감지할 텍스트 (화면에서 찾을 문구)", textPrimary))
-                body.addView(targetTextInput.apply {
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        context.dpToPxInt(42f)
-                    ).apply { bottomMargin = context.dpToPxInt(8f) }
+                body.addView(makeSectionLabel(context, "감지할 기준 이미지", textPrimary))
+                body.addView(TextView(context).apply {
+                    text = if (!step.targetImagePath.isNullOrBlank()) {
+                        "이미지 등록됨 (유사도 ${step.imageSimilarityPercent}%)"
+                    } else {
+                        "아직 감지 이미지가 지정되지 않았습니다"
+                    }
+                    setTextColor(textSecondary)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                    setPadding(0, 0, 0, context.dpToPxInt(8f))
                 })
 
                 val pickScreenBtn = createActionButton(
                     context = context,
-                    label = "화면에서 감지할 부분 직접 선택",
-                    bgColor = accentPurple,
+                    label = "화면에서 감지할 이미지 영역 선택",
+                    bgColor = primaryBlue,
                     textColor = Color.WHITE
                 ).apply {
                     layoutParams = LinearLayout.LayoutParams(
@@ -1107,7 +1102,6 @@ object OverlayModalFactory {
                     ).apply { bottomMargin = context.dpToPxInt(10f) }
                     setOnClickListener {
                         val draft = step.copy(
-                            targetText = targetTextInput.text.toString().trim(),
                             repeatIntervalMs = (repeatIntervalInput.text.toString().toLongOrNull() ?: step.repeatIntervalMs).coerceAtLeast(20L),
                             postDelayMs = (postDelayInput.text.toString().toLongOrNull() ?: step.postDelayMs).coerceAtLeast(20L)
                         )
@@ -1232,7 +1226,6 @@ object OverlayModalFactory {
             }
             setOnClickListener {
                 val updated = step.copy(
-                    targetText = targetTextInput.text.toString().trim(),
                     repeatIntervalMs = (repeatIntervalInput.text.toString().toLongOrNull() ?: step.repeatIntervalMs).coerceAtLeast(20L),
                     tapDurationMs = (tapDurationInput.text.toString().toLongOrNull() ?: step.tapDurationMs).coerceIn(10L, 60_000L),
                     scrollDirection = selectedScrollDir,
@@ -1259,51 +1252,31 @@ object OverlayModalFactory {
     }
 
     /**
-     * Full-screen interactive overlay shown when a REPEAT_UNTIL_DETECT step has no target configured
-     * (or when the user taps "화면에서 감지할 부분 직접 선택").
-     * Lets the user tap any highlighted text region on screen or drag a selection box over the target area,
-     * saves it as the detection target, and optionally resumes execution immediately.
+     * Full-screen interactive overlay shown when a REPEAT_UNTIL_DETECT step has no image configured
+     * (or when the user taps "화면에서 감지할 이미지 영역 선택").
+     * Lets the user drag a selection box over the target area, saves it as a cropped template image,
+     * and optionally resumes execution immediately.
      */
     fun buildScreenDetectionPickerOverlay(
         context: Context,
         step: ScenarioStep,
-        candidates: List<ScreenDetector.ScreenTextCandidate>,
         isDark: Boolean,
         resumeAfterSave: Boolean,
-        onSaveText: (String) -> Unit,
         onSaveCropRect: (Rect) -> Unit,
         onCancel: () -> Unit
     ): View {
-        val bgColor = if (isDark) Color.parseColor("#1E2128") else Color.parseColor("#FFFFFF")
-        val cardSurface = if (isDark) Color.parseColor("#272B35") else Color.parseColor("#F4F6FA")
-        val textPrimary = if (isDark) Color.parseColor("#F1F4FA") else Color.parseColor("#181C24")
-        val textSecondary = if (isDark) Color.parseColor("#9AA3B5") else Color.parseColor("#636D7E")
+        val bgColor = if (isDark) Color.parseColor("#1C1C1E") else Color.parseColor("#FFFFFF")
+        val cardSurface = if (isDark) Color.parseColor("#262629") else Color.parseColor("#F4F6FA")
+        val textPrimary = if (isDark) Color.parseColor("#F2F2F5") else Color.parseColor("#181C24")
+        val textSecondary = if (isDark) Color.parseColor("#9A9AA0") else Color.parseColor("#636D7E")
         val primaryBlue = Color.parseColor("#3482FF")
         val emerald = Color.parseColor("#10B981")
 
         val root = FrameLayout(context)
-        val textInput = createTextEditText(
-            context = context,
-            initialText = step.targetText,
-            hintText = "화면의 글자 박스를 터치하거나 직접 입력",
-            bgCol = cardSurface,
-            textColor = textPrimary,
-            hintColor = textSecondary
-        )
-
         var selectedRect: Rect? = null
         var cropImageBtn: TextView? = null
 
         val canvasOverlay = object : View(context) {
-            private val candidateFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-                color = Color.argb(40, 52, 130, 255)
-            }
-            private val candidateStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
-                strokeWidth = context.dpToPx(1.8f)
-                color = Color.argb(210, 52, 130, 255)
-            }
             private val selectedFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
                 color = Color.argb(65, 16, 185, 129)
@@ -1333,11 +1306,6 @@ object OverlayModalFactory {
                 canvas.save()
                 canvas.translate(-winLoc[0].toFloat(), -winLoc[1].toFloat())
                 val rCorner = context.dpToPx(6f)
-                candidates.forEach { cand ->
-                    val rf = RectF(cand.bounds)
-                    canvas.drawRoundRect(rf, rCorner, rCorner, candidateFill)
-                    canvas.drawRoundRect(rf, rCorner, rCorner, candidateStroke)
-                }
                 selectedRect?.let { sel ->
                     val rf = RectF(sel)
                     canvas.drawRoundRect(rf, rCorner, rCorner, selectedFill)
@@ -1372,34 +1340,13 @@ object OverlayModalFactory {
                             val bottom = max(downY, curY).roundToInt()
                             val dragRect = Rect(left, top, right, bottom)
                             selectedRect = dragRect
-                            val matchedTexts = candidates
-                                .filter { Rect.intersects(it.bounds, dragRect) }
-                                .map { it.text }
-                                .distinct()
-                            if (matchedTexts.isNotEmpty()) {
-                                textInput.setText(matchedTexts.first())
-                            }
-                            cropImageBtn?.visibility = if (dragRect.width() >= 24 && dragRect.height() >= 24) {
-                                VISIBLE
-                            } else {
-                                GONE
-                            }
+                            cropImageBtn?.isEnabled = dragRect.width() >= 24 && dragRect.height() >= 24
+                            cropImageBtn?.alpha = if (dragRect.width() >= 24 && dragRect.height() >= 24) 1f else 0.45f
                             invalidate()
                         }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (!isDraggingBox) {
-                            val tapX = rx.roundToInt()
-                            val tapY = ry.roundToInt()
-                            val hit = candidates.firstOrNull { it.bounds.contains(tapX, tapY) }
-                            if (hit != null) {
-                                selectedRect = Rect(hit.bounds)
-                                textInput.setText(hit.text)
-                                cropImageBtn?.visibility = VISIBLE
-                                invalidate()
-                            }
-                        }
                         isDraggingBox = false
                         return true
                     }
@@ -1432,96 +1379,20 @@ object OverlayModalFactory {
 
         bottomCard.addView(TextView(context).apply {
             text = if (resumeAfterSave) {
-                "감지할 부분 선택 (#${step.order} 단계)"
+                "감지할 이미지 영역 선택 (#${step.order} 단계)"
             } else {
-                "화면에서 감지할 부분 선택"
+                "화면에서 감지할 이미지 영역 선택"
             }
             setTextColor(textPrimary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         })
         bottomCard.addView(TextView(context).apply {
-            text = if (candidates.isNotEmpty()) {
-                "화면의 파란 글자 박스를 터치하거나 영역을 드래그해 선택하세요."
-            } else {
-                "이 화면에서 글자 정보를 찾지 못했습니다. 영역을 드래그해 이미지로 저장하거나 아래에 글자를 직접 입력하세요."
-            }
+            text = "감지할 버튼이나 배너 위를 드래그해 사각형으로 지정하세요."
             setTextColor(textSecondary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(8f))
+            setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(10f))
         })
-
-        if (candidates.isNotEmpty()) {
-            val hScroll = HorizontalScrollView(context).apply {
-                isHorizontalScrollBarEnabled = false
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = context.dpToPxInt(8f) }
-            }
-            val chipRow = LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-            }
-            candidates.map { it.text }.distinct().take(12).forEach { candText ->
-                val chip = createPillChip(
-                    context = context,
-                    label = candText.take(18),
-                    selected = false,
-                    inactiveBg = cardSurface,
-                    inactiveText = textPrimary,
-                    activeBg = primaryBlue
-                ).apply {
-                    val padH = context.dpToPxInt(10f)
-                    val padV = context.dpToPxInt(6f)
-                    setPadding(padH, padV, padH, padV)
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply { marginEnd = context.dpToPxInt(6f) }
-                    setOnClickListener {
-                        textInput.setText(candText)
-                        candidates.firstOrNull { it.text == candText }?.let {
-                            selectedRect = Rect(it.bounds)
-                            cropImageBtn?.visibility = View.VISIBLE
-                            canvasOverlay.invalidate()
-                        }
-                    }
-                }
-                chipRow.addView(chip)
-            }
-            hScroll.addView(chipRow)
-            bottomCard.addView(hScroll)
-        }
-
-        bottomCard.addView(textInput.apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                context.dpToPxInt(42f)
-            ).apply { bottomMargin = context.dpToPxInt(8f) }
-        })
-
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            val imgBtn = createActionButton(
-                context = context,
-                label = if (resumeAfterSave) "선택 영역을 이미지로 저장 후 계속 실행" else "선택 영역을 감지 이미지로 저장",
-                bgColor = Color.parseColor("#7C5CFF"),
-                textColor = Color.WHITE
-            ).apply {
-                visibility = View.GONE
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    context.dpToPxInt(40f)
-                ).apply { bottomMargin = context.dpToPxInt(8f) }
-                setOnClickListener {
-                    val rect = selectedRect
-                    if (rect != null && rect.width() >= 16 && rect.height() >= 16) {
-                        onSaveCropRect(rect)
-                    }
-                }
-            }
-            cropImageBtn = imgBtn
-            bottomCard.addView(imgBtn)
-        }
 
         val btnRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1536,24 +1407,25 @@ object OverlayModalFactory {
             }
             setOnClickListener { onCancel() }
         }
-        val saveTextBtn = createActionButton(
+        val saveImgBtn = createActionButton(
             context = context,
-            label = if (resumeAfterSave) "텍스트 저장 후 실행" else "감지 텍스트 저장",
-            bgColor = emerald,
+            label = if (resumeAfterSave) "선택 영역 저장 후 실행" else "감지 이미지 저장",
+            bgColor = primaryBlue,
             textColor = Color.WHITE
         ).apply {
+            isEnabled = false
+            alpha = 0.45f
             layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(42f), 1.4f)
             setOnClickListener {
-                val chosen = textInput.text.toString().trim()
-                if (chosen.isNotEmpty()) {
-                    onSaveText(chosen)
-                } else {
-                    textInput.hint = "감지할 글자를 선택하거나 입력해 주세요!"
+                val rect = selectedRect
+                if (rect != null && rect.width() >= 16 && rect.height() >= 16) {
+                    onSaveCropRect(rect)
                 }
             }
         }
+        cropImageBtn = saveImgBtn
         btnRow.addView(cancelBtn)
-        btnRow.addView(saveTextBtn)
+        btnRow.addView(saveImgBtn)
         bottomCard.addView(btnRow)
 
         root.addView(

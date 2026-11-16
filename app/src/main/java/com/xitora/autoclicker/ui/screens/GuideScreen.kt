@@ -134,7 +134,7 @@ fun GuideScreen(
             ) {
                 GuideRow(
                     icon = MiuixIcons.Play,
-                    accent = Color(0xFF2B8A3E),
+                    accent = MiuixTheme.colorScheme.primary,
                     title = "시작 / 일시정지 (▶ / ⏸)",
                     subtitle = "설정된 간격(ms)과 종료 조건에 따라 자동 클릭을 시작하거나 멈춥니다."
                 )
@@ -148,14 +148,14 @@ fun GuideScreen(
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 GuideRow(
                     icon = MiuixIcons.Settings,
-                    accent = Color(0xFF06B6D4),
+                    accent = MiuixTheme.colorScheme.primary,
                     title = "패널 설정 · 타겟 직접 탭",
                     subtitle = "컨트롤 패널의 ⚙ 또는 화면 위 과녁 번호를 짧게 눌러 타이밍을 바로 바꿀 수 있습니다."
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 GuideRow(
                     icon = MiuixIcons.Close,
-                    accent = Color(0xFFD93025),
+                    accent = MiuixTheme.colorScheme.error,
                     title = "오버레이 닫기 (✕)",
                     subtitle = "자동 클릭을 중단하고 떠 있는 컨트롤 패널과 모든 타겟 과녁을 닫습니다."
                 )
@@ -174,7 +174,7 @@ fun GuideScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Stopwatch,
                             contentDescription = null,
-                            accentColor = Color(0xFF06B6D4)
+                            accentColor = MiuixTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -199,7 +199,7 @@ fun GuideScreen(
                         Icon(
                             imageVector = MiuixIcons.Layers,
                             contentDescription = null,
-                            tint = Color(0xFF2B8A3E),
+                            tint = MiuixTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))

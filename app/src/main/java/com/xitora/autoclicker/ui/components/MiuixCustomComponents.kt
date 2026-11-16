@@ -5,14 +5,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -31,6 +30,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.*
 import com.xitora.autoclicker.service.ScreenDetector
+import com.xitora.autoclicker.ui.theme.AutoClickerMotion
 import com.xitora.autoclicker.ui.theme.LocalIsDarkTheme
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -92,17 +93,39 @@ fun SquirclePillBadge(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (onClick != null && isPressed) 0.94f else 1f,
+        animationSpec = AutoClickerMotion.InteractiveSpring,
+        label = "pillPressScale"
+    )
     val base = modifier
+        .graphicsLayer {
+            scaleX = pressScale
+            scaleY = pressScale
+        }
         .squircleBackground(backgroundColor, cornerRadius = 10.dp)
         .squircleClip(10.dp)
-    val finalModifier = if (onClick != null) base.clickable(onClick = onClick) else base
+    val finalModifier = if (onClick != null) {
+        base.clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = onClick
+        )
+    } else {
+        base
+    }
     Box(
         modifier = finalModifier.padding(horizontal = 10.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
+            style = MiuixTheme.textStyles.footnote1.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontFeatureSettings = "tnum"
+            ),
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -308,7 +331,7 @@ fun ClickTimingEditorSection(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateContentSize(),
+                    .animateContentSize(animationSpec = AutoClickerMotion.LayoutSizeSpring),
                 cornerRadius = 20.dp,
                 insideMargin = PaddingValues(16.dp)
             ) {
@@ -397,7 +420,7 @@ fun ClickTimingEditorSection(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .animateContentSize(),
+                .animateContentSize(animationSpec = AutoClickerMotion.LayoutSizeSpring),
             cornerRadius = 20.dp
         ) {
             SwitchPreference(
@@ -412,14 +435,14 @@ fun ClickTimingEditorSection(
                     MiuixGlassIcon(
                         icon = MiuixIcons.Stopwatch,
                         contentDescription = null,
-                        accentColor = Color(0xFF06B6D4)
+                        accentColor = MiuixTheme.colorScheme.primary
                     )
                 }
             )
             AnimatedVisibility(
                 visible = config.antiBotRandomEnabled,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+                enter = AutoClickerMotion.expandEnter(),
+                exit = AutoClickerMotion.shrinkExit()
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
@@ -755,8 +778,8 @@ fun TargetPointEditDialog(
                 }
                 AnimatedVisibility(
                     visible = editing.antiBotRandomEnabled,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
+                    enter = AutoClickerMotion.expandEnter(),
+                    exit = AutoClickerMotion.shrinkExit()
                 ) {
                     Slider(
                         value = editing.randomRadiusDp.toFloat(),
@@ -900,50 +923,13 @@ fun ScenarioStepEditDialog(
                 when (editing.type) {
                     ScenarioStepType.REPEAT_UNTIL_DETECT -> {
                         HorizontalDivider()
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "반복 중단(다음 단계 전환) 감지 조건",
-                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold)
-                            )
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                items(DetectionConditionType.entries) { cond ->
-                                    val selected = editing.conditionType == cond
-                                    SquirclePillBadge(
-                                        text = cond.label,
-                                        backgroundColor = if (selected) {
-                                            MiuixTheme.colorScheme.primary
-                                        } else {
-                                            MiuixTheme.colorScheme.secondaryContainer
-                                        },
-                                        contentColor = if (selected) {
-                                            MiuixTheme.colorScheme.onPrimary
-                                        } else {
-                                            MiuixTheme.colorScheme.onSecondaryContainer
-                                        },
-                                        onClick = { editing = editing.copy(conditionType = cond) }
-                                    )
-                                }
-                            }
-                        }
-
-                        if (editing.conditionType != DetectionConditionType.IMAGE_ONLY) {
-                            TextField(
-                                value = editing.targetText,
-                                onValueChange = { if (it.length <= 120) editing = editing.copy(targetText = it) },
-                                label = "감지할 화면 텍스트 (복수 키워드는 | 구분)",
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        if (editing.conditionType != DetectionConditionType.TEXT_ONLY) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .squircleBackground(MiuixTheme.colorScheme.surfaceContainerHigh, 14.dp)
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .squircleBackground(MiuixTheme.colorScheme.surfaceContainerHigh, 14.dp)
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1014,7 +1000,6 @@ fun ScenarioStepEditDialog(
                                     )
                                 }
                             }
-                        }
 
                         TimeUnitValueRow(
                             title = "반복 클릭 간격",
@@ -1026,7 +1011,7 @@ fun ScenarioStepEditDialog(
                         )
                         TimeUnitValueRow(
                             title = "화면 감지 확인 주기",
-                            subtitle = "텍스트/이미지 조건을 확인하는 간격 (ms)",
+                            subtitle = "이미지 조건을 확인하는 간격 (ms)",
                             value = editing.detectCheckIntervalMs,
                             unit = TimeUnitOption.MS,
                             quickPresets = listOf(250L, 450L, 800L, 1200L),
@@ -1130,7 +1115,11 @@ fun ScenarioStepEditDialog(
                             onCheckedChange = { editing = editing.copy(antiBotRandomEnabled = it) }
                         )
                     }
-                    AnimatedVisibility(visible = editing.antiBotRandomEnabled) {
+                    AnimatedVisibility(
+                        visible = editing.antiBotRandomEnabled,
+                        enter = AutoClickerMotion.expandEnter(),
+                        exit = AutoClickerMotion.shrinkExit()
+                    ) {
                         Slider(
                             value = editing.randomRadiusDp.toFloat(),
                             onValueChange = { editing = editing.copy(randomRadiusDp = it.roundToInt().coerceIn(8, 80)) },
@@ -1171,6 +1160,51 @@ fun ScenarioStepEditDialog(
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun ConfirmActionDialog(
+    show: Boolean,
+    title: String,
+    summary: String,
+    confirmText: String,
+    isDestructive: Boolean = false,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    OverlayDialog(
+        show = show,
+        title = title,
+        summary = summary,
+        onDismissRequest = onDismiss
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            TextButton(
+                text = "취소",
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                text = confirmText,
+                onClick = {
+                    onConfirm()
+                    onDismiss()
+                },
+                colors = if (isDestructive) {
+                    ButtonDefaults.textButtonColors(
+                        color = MiuixTheme.colorScheme.error,
+                        textColor = Color.White
+                    )
+                } else {
+                    ButtonDefaults.textButtonColorsPrimary()
+                },
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

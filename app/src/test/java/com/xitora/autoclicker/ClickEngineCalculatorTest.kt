@@ -159,26 +159,27 @@ class ClickEngineCalculatorTest {
     }
 
     @Test
-    fun `default 8 step scenario workflow and serialization round trip behave cleanly`() {
-        val steps = defaultScenarioSteps()
-        assertEquals(8, steps.size)
-        assertEquals(ScenarioStepType.REPEAT_UNTIL_DETECT, steps[0].type)
+    fun `initial scenario state is empty and custom scenario serialization round trip behaves cleanly`() {
+        val initialState = AutoClickerDataState()
+        assertTrue(initialState.scenarioSteps.isEmpty())
+
+        val steps = listOf(
+            ScenarioStep(
+                id = "sc_1",
+                order = 1,
+                title = "반복 터치 · 이미지 감지",
+                type = ScenarioStepType.REPEAT_UNTIL_DETECT,
+                targetImagePath = "/tmp/tpl.png"
+            ),
+            ScenarioStep(id = "sc_2", order = 2, type = ScenarioStepType.SINGLE_TAP),
+            ScenarioStep(id = "sc_3", order = 3, type = ScenarioStepType.SCROLL)
+        )
         assertEquals("1🔄", steps[0].badgeText())
-        assertEquals(ScenarioStepType.SINGLE_TAP, steps[1].type)
-        assertEquals(ScenarioStepType.SINGLE_TAP, steps[2].type)
-        assertEquals(ScenarioStepType.SINGLE_TAP, steps[3].type)
-        assertEquals(ScenarioStepType.SCROLL, steps[4].type)
-        assertEquals("5↓", steps[4].badgeText())
-        assertEquals(ScenarioStepType.SINGLE_TAP, steps[5].type)
-        assertEquals(ScenarioStepType.SINGLE_TAP, steps[6].type)
-        assertEquals(ScenarioStepType.SINGLE_TAP, steps[7].type)
+        assertEquals("3↓", steps[2].badgeText())
 
         val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
-        val updatedSteps = steps.mapIndexed { idx, s ->
-            if (idx == 0) s.copy(targetText = "완료|확인", targetImagePath = "/tmp/tpl.png") else s
-        }
         val state = AutoClickerDataState(
-            scenarioSteps = updatedSteps,
+            scenarioSteps = steps,
             presets = listOf(
                 ClickPreset(
                     id = "sc_p1",
@@ -186,7 +187,7 @@ class ClickEngineCalculatorTest {
                     mode = ClickMode.SCENARIO,
                     timing = ClickTimingConfig(repeatMode = RepeatMode.COUNT, repeatCount = 10),
                     targets = emptyList(),
-                    scenarioSteps = updatedSteps
+                    scenarioSteps = steps
                 )
             )
         )
@@ -196,7 +197,7 @@ class ClickEngineCalculatorTest {
     }
 
     @Test
-    fun `scroll swipe coordinates and text keyword matching stay accurate`() {
+    fun `scroll swipe coordinates and image detection target validation stay accurate`() {
         val (downStart, downEnd) = ClickEngineCalculator.computeSwipePoints(
             centerX = 500f,
             centerY = 1000f,
@@ -220,12 +221,12 @@ class ClickEngineCalculatorTest {
         )
         assertTrue(upStart.second < upEnd.second)
 
-        assertTrue(ClickEngineCalculator.matchesTargetText("보상 획득 완료!", "완료 | 수령"))
-        assertFalse(ClickEngineCalculator.matchesTargetText("진행 중", "완료 | 수령"))
-
-        val unconfiguredStep = defaultScenarioSteps().first()
+        val unconfiguredStep = ScenarioStep(
+            id = "sc_detect",
+            order = 1,
+            type = ScenarioStepType.REPEAT_UNTIL_DETECT
+        )
         assertFalse(ScreenDetector.hasValidDetectionTarget(unconfiguredStep))
-        assertTrue(ScreenDetector.hasValidDetectionTarget(unconfiguredStep.copy(targetText = "보상 받기")))
         assertTrue(ScreenDetector.hasValidDetectionTarget(unconfiguredStep.copy(targetImagePath = "/tmp/tpl.png")))
     }
 
@@ -339,7 +340,10 @@ class ClickEngineCalculatorTest {
             mode = ClickMode.SCENARIO,
             timing = ClickTimingConfig(repeatMode = RepeatMode.COUNT, repeatCount = 5),
             targets = emptyList(),
-            scenarioSteps = defaultScenarioSteps()
+            scenarioSteps = listOf(
+                ScenarioStep(id = "s1", order = 1, type = ScenarioStepType.REPEAT_UNTIL_DETECT),
+                ScenarioStep(id = "s2", order = 2, type = ScenarioStepType.SINGLE_TAP)
+            )
         )
         val json = AutoClickerRepository.encodeSinglePresetJson(original)
         val imported = AutoClickerRepository.parseSinglePresetJson(json).getOrThrow()
@@ -347,7 +351,7 @@ class ClickEngineCalculatorTest {
         assertNotEquals(original.id, imported.id)
         assertEquals(original.name, imported.name)
         assertEquals(ClickMode.SCENARIO, imported.mode)
-        assertEquals(8, imported.scenarioSteps.size)
+        assertEquals(2, imported.scenarioSteps.size)
         assertEquals(5, imported.timing.repeatCount)
 
         // Full backup JSON should be rejected cleanly by single preset importer

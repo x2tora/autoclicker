@@ -77,14 +77,17 @@ fun TouchTestScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             text = "총 $totalTaps 회 터치",
-                            style = MiuixTheme.textStyles.headline1.copy(fontWeight = FontWeight.Bold),
+                            style = MiuixTheme.textStyles.headline1.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFeatureSettings = "tnum"
+                            ),
                             color = MiuixTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "직전 간격: ${lastIntervalMs?.let { "${it} ms" } ?: "측정 대기"} · 속도 ${
                                 String.format(Locale.US, "%.1f", cps)
                             } CPS",
-                            style = MiuixTheme.textStyles.footnote1,
+                            style = MiuixTheme.textStyles.footnote1.copy(fontFeatureSettings = "tnum"),
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }

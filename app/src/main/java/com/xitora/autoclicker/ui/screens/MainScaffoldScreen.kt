@@ -6,13 +6,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,7 +19,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,7 +41,9 @@ import com.xitora.autoclicker.ui.components.StackedToastHost
 import com.xitora.autoclicker.ui.components.StackedToastState
 import com.xitora.autoclicker.ui.components.StandardMiuixNavBar
 import com.xitora.autoclicker.ui.components.rememberStackedToastState
+import com.xitora.autoclicker.ui.theme.AutoClickerMotion
 import com.xitora.autoclicker.ui.theme.LocalAppBackdrop
+import com.xitora.autoclicker.ui.theme.LocalLiquidGlassEnabled
 import com.xitora.autoclicker.viewmodel.AutoClickerViewModel
 import kotlinx.serialization.Serializable
 import top.yukonga.miuix.kmp.basic.*
@@ -222,12 +222,15 @@ private fun MainTabsHost(
     )
 
     val navBarStyle = state.settings.resolvedNavBarStyle()
+    val liquidGlassEnabled = navBarStyle == NavBarStyle.LIQUID_GLASS
     val bottomBarExtraPadding = if (navBarStyle == NavBarStyle.LIQUID_GLASS) 104.dp else 90.dp
     val scrollBehavior = MiuixScrollBehavior(state = rememberTopAppBarState())
     val useShader = isRuntimeShaderSupported()
-    val barOverlayColor = MiuixTheme.colorScheme.surface.copy(alpha = if (useShader) 0.72f else 0.96f)
+    val barOverlayColor = MiuixTheme.colorScheme.surface.copy(alpha = if (useShader) 0.48f else 0.90f)
     val tabTitles = listOf("오토 클리커", "프리셋 보관함", "터치 테스트", "권한 · 사용 가이드")
+    val focusManager = LocalFocusManager.current
 
+    CompositionLocalProvider(LocalLiquidGlassEnabled provides liquidGlassEnabled) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
@@ -245,80 +248,85 @@ private fun MainTabsHost(
             } else {
                 Modifier.background(barOverlayColor)
             }
-            Box(modifier = topBlurMod) {
-                SmallTopAppBar(
-                    title = tabTitles[selectedTab],
-                    titleColor = MiuixTheme.colorScheme.onSurface.copy(alpha = (1f - tickerAlpha).coerceIn(0f, 1f)),
-                    color = Color.Transparent,
-                    scrollBehavior = scrollBehavior,
-                    actions = {
-                        IconButton(onClick = {
-                            showQuickMenu = false
-                            onOpenSettings()
-                        }) {
-                            Icon(
-                                imageVector = MiuixIcons.Regular.Settings,
-                                contentDescription = "설정 및 백업",
-                                tint = MiuixTheme.colorScheme.onSurface
+            Box(
+                modifier = topBlurMod.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(modifier = Modifier.widthIn(max = 620.dp).fillMaxWidth()) {
+                    SmallTopAppBar(
+                        title = tabTitles[selectedTab],
+                        titleColor = MiuixTheme.colorScheme.onSurface.copy(alpha = (1f - tickerAlpha).coerceIn(0f, 1f)),
+                        color = Color.Transparent,
+                        scrollBehavior = scrollBehavior,
+                        actions = {
+                            IconButton(onClick = {
+                                showQuickMenu = false
+                                onOpenSettings()
+                            }) {
+                                Icon(
+                                    imageVector = MiuixIcons.Regular.Settings,
+                                    contentDescription = "설정 및 백업",
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    )
+                    if (tickerAlpha > 0.01f) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .statusBarsPadding()
+                                .padding(start = 20.dp, end = 64.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            PinnedHeaderLiveTicker(
+                                runtime = runtime,
+                                onAction = {
+                                    if (runtime.isOverlayVisible) {
+                                        handleToggleClicking()
+                                    } else {
+                                        handleLaunchOrToggleOverlay(runtime.activeMode)
+                                    }
+                                },
+                                modifier = Modifier.graphicsLayer {
+                                    alpha = tickerAlpha
+                                    translationY = (1f - tickerAlpha) * 14f
+                                }
                             )
                         }
-                    }
-                )
-                if (tickerAlpha > 0.01f) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .statusBarsPadding()
-                            .padding(start = 20.dp, end = 64.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        PinnedHeaderLiveTicker(
-                            runtime = runtime,
-                            onAction = {
-                                if (runtime.isOverlayVisible) {
-                                    handleToggleClicking()
-                                } else {
-                                    handleLaunchOrToggleOverlay(runtime.activeMode)
-                                }
-                            },
-                            modifier = Modifier.graphicsLayer {
-                                alpha = tickerAlpha
-                                translationY = (1f - tickerAlpha) * 14f
-                            }
-                        )
                     }
                 }
             }
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                }
+        ) {
             // Capture layer ONLY: surface background + scrolling pages
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .layerBackdrop(barBackdrop)
-                    .background(surfaceBg)
+                    .background(surfaceBg),
+                contentAlignment = Alignment.TopCenter
             ) {
                 Box(
                     modifier = Modifier
+                        .widthIn(max = 620.dp)
                         .fillMaxSize()
                         .padding(top = paddingValues.calculateTopPadding())
+                        .imePadding()
                 ) {
                     AnimatedContent(
                         targetState = selectedTab,
                         transitionSpec = {
-                            val forward = targetState > initialState
-                            val slideOffset: (Int) -> Int = { fullWidth ->
-                                val delta = (fullWidth * 0.10f).toInt().coerceAtLeast(1)
-                                if (forward) delta else -delta
-                            }
-                            val exitOffset: (Int) -> Int = { fullWidth ->
-                                val delta = (fullWidth * 0.08f).toInt().coerceAtLeast(1)
-                                if (forward) -delta else delta
-                            }
-                            (fadeIn(tween(220)) + slideInHorizontally(tween(260), slideOffset))
-                                .togetherWith(fadeOut(tween(180)) + slideOutHorizontally(tween(200), exitOffset))
-                                .using(SizeTransform(clip = false))
+                            AutoClickerMotion.tabTransition(
+                                forward = targetState > initialState
+                            ).using(SizeTransform(clip = false))
                         },
                         label = "mainTabTransition"
                     ) { tab ->
@@ -343,7 +351,7 @@ private fun MainTabsHost(
                                 onUpdateScenarioStep = viewModel::updateScenarioStep,
                                 onDeleteScenarioStep = { id -> viewModel.removeScenarioStepById(id) },
                                 onMoveScenarioStep = viewModel::moveScenarioStep,
-                                onResetScenarioSteps = viewModel::resetScenarioToDefault8Steps,
+                                onResetScenarioSteps = viewModel::clearScenarioSteps,
                                 onSavePresetClick = { mode -> presetSaveMode = mode },
                                 onLaunchPreset = { preset ->
                                     viewModel.applyPreset(preset)
@@ -413,19 +421,6 @@ private fun MainTabsHost(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Keep floating overlays outside layerBackdrop to avoid cyclic RenderNode graphs.
-            StackedToastHost(
-                state = toastState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        bottom = if (navBarStyle == NavBarStyle.LIQUID_GLASS) 92.dp else 86.dp
-                    )
-            )
-
             val isAccessibilityMissing = !runtime.isAccessibilityEnabled
             when (navBarStyle) {
                 NavBarStyle.MIUIX -> StandardMiuixNavBar(
@@ -455,13 +450,15 @@ private fun MainTabsHost(
             val isSingleVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.SINGLE
             val isMultiVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.MULTI
             val isScenarioVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.SCENARIO
+            val primaryAccent = MiuixTheme.colorScheme.primary
             val quickMenuActions = remember(
                 isSingleVisible,
                 isMultiVisible,
                 isScenarioVisible,
                 runtime.isOverlayVisible,
                 runtime.isClicking,
-                runtime.activeMode
+                runtime.activeMode,
+                primaryAccent
             ) {
                 buildList {
                     add(
@@ -470,7 +467,7 @@ private fun MainTabsHost(
                             title = if (isSingleVisible) "단일 타겟 오버레이 닫기" else "단일 타겟 오버레이 실행",
                             subtitle = if (isSingleVisible) "화면의 단일 타겟 패널을 종료합니다" else "1개 포인트 반복 터치 패널 띄우기",
                             icon = MiuixIcons.Location,
-                            accentColor = Color(0xFF3482FF),
+                            accentColor = primaryAccent,
                             onClick = { handleLaunchOrToggleOverlay(ClickMode.SINGLE) }
                         )
                     )
@@ -480,7 +477,7 @@ private fun MainTabsHost(
                             title = if (isMultiVisible) "다중 타겟 오버레이 닫기" else "다중 타겟 오버레이 실행",
                             subtitle = if (isMultiVisible) "화면의 다중 타겟 패널을 종료합니다" else "순서대로 여러 지점 자동 터치 실행",
                             icon = MiuixIcons.Layers,
-                            accentColor = Color(0xFF2B8A3E),
+                            accentColor = primaryAccent,
                             onClick = { handleLaunchOrToggleOverlay(ClickMode.MULTI) }
                         )
                     )
@@ -488,9 +485,9 @@ private fun MainTabsHost(
                         QuickMenuAction(
                             id = "launch_scenario",
                             title = if (isScenarioVisible) "시나리오 오버레이 닫기" else "시나리오 매크로 실행",
-                            subtitle = if (isScenarioVisible) "조건 감지 매크로 패널을 종료합니다" else "텍스트·이미지 감지 + 클릭/스크롤 루프",
+                            subtitle = if (isScenarioVisible) "조건 감지 매크로 패널을 종료합니다" else "이미지 감지 + 클릭/스크롤 루프",
                             icon = MiuixIcons.Favorites,
-                            accentColor = Color(0xFF7C5CFF),
+                            accentColor = primaryAccent,
                             onClick = { handleLaunchOrToggleOverlay(ClickMode.SCENARIO) }
                         )
                     )
@@ -512,7 +509,7 @@ private fun MainTabsHost(
                                 title = "현재 설정 프리셋 저장",
                                 subtitle = "${runtime.activeMode.label} 설정을 보관함에 기록",
                                 icon = MiuixIcons.Favorites,
-                                accentColor = Color(0xFF06B6D4),
+                                accentColor = primaryAccent,
                                 onClick = { presetSaveMode = runtime.activeMode }
                             )
                         )
@@ -525,6 +522,19 @@ private fun MainTabsHost(
                 navBarStyle = navBarStyle,
                 actions = quickMenuActions,
                 onDismiss = { showQuickMenu = false }
+            )
+
+            // Keep floating overlays outside layerBackdrop and above quick-add menu in Z-order.
+            StackedToastHost(
+                state = toastState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = if (navBarStyle == NavBarStyle.LIQUID_GLASS) 92.dp else 86.dp
+                    )
             )
 
 
@@ -556,6 +566,7 @@ private fun MainTabsHost(
             )
         }
     }
+    }
 }
 
 @Composable
@@ -569,30 +580,49 @@ private fun SettingsScreenHost(
     val updateUiState by viewModel.updateUiState.collectAsStateWithLifecycle()
     val scrollBehavior = MiuixScrollBehavior(state = rememberTopAppBarState())
     val notify: (String) -> Unit = { msg -> toastState.show(msg) }
+    val focusManager = LocalFocusManager.current
+    val liquidGlassEnabled = state.settings.resolvedNavBarStyle() == NavBarStyle.LIQUID_GLASS
 
+    CompositionLocalProvider(LocalLiquidGlassEnabled provides liquidGlassEnabled) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            SmallTopAppBar(
-                title = "설정 · 테마 · 백업",
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = "뒤로가기"
-                        )
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                SmallTopAppBar(
+                    modifier = Modifier.widthIn(max = 620.dp),
+                    title = "설정 · 테마 · 백업",
+                    scrollBehavior = scrollBehavior,
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = "뒤로가기"
+                            )
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = paddingValues.calculateTopPadding())
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                },
+            contentAlignment = Alignment.TopCenter
         ) {
-            MoreSettingsScreen(
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 620.dp)
+                    .fillMaxSize()
+                    .imePadding()
+            ) {
+                MoreSettingsScreen(
                 state = state,
                 isAccessibilityEnabled = runtime.isAccessibilityEnabled,
                 scrollBehavior = scrollBehavior,
@@ -611,6 +641,7 @@ private fun SettingsScreenHost(
                 onCheckForUpdate = { viewModel.checkForUpdate(manual = true, onFeedback = notify) },
                 onNotify = notify
             )
+            }
 
             StackedToastHost(
                 state = toastState,
@@ -628,6 +659,7 @@ private fun SettingsScreenHost(
                 onOpenPermissionSettings = viewModel::openInstallUnknownSourcesSettings
             )
         }
+    }
     }
 }
 
@@ -681,7 +713,10 @@ private fun PinnedHeaderLiveTicker(
         )
         Text(
             text = statusLabel,
-            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
+            style = MiuixTheme.textStyles.footnote1.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontFeatureSettings = "tnum"
+            ),
             color = MiuixTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

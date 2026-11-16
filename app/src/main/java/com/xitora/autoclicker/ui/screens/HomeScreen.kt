@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.*
 import com.xitora.autoclicker.ui.components.ClickTimingEditorSection
+import com.xitora.autoclicker.ui.components.EmptyDataBanner
 import com.xitora.autoclicker.ui.components.MiuixGlassIcon
 import com.xitora.autoclicker.ui.components.ScenarioStepEditDialog
 import com.xitora.autoclicker.ui.components.SquirclePillBadge
@@ -148,7 +149,7 @@ fun HomeScreen(
                     summaryLine1 = "${state.multiTargets.size}개 지점 · 간격 ${multiIntervalMs}ms",
                     summaryLine2 = ClickEngineCalculator.formatRepeatSummary(state.multiConfig),
                     icon = MiuixIcons.Layers,
-                    accentColor = Color(0xFF2B8A3E),
+                    accentColor = MiuixTheme.colorScheme.primary,
                     isActive = isMultiActive,
                     isAccessibilityEnabled = runtime.isAccessibilityEnabled,
                     onLaunchClick = { onLaunchMode(ClickMode.MULTI) },
@@ -190,7 +191,7 @@ fun HomeScreen(
                 ) {
                     QuickActionGridCard(
                         icon = MiuixIcons.Favorites,
-                        accentColor = Color(0xFFF59E0B),
+                        accentColor = MiuixTheme.colorScheme.primary,
                         title = "프리셋 저장",
                         subtitle = if (isMultiActive) "다중 타겟 구성" else "단일 타겟 구성",
                         onClick = {
@@ -213,7 +214,7 @@ fun HomeScreen(
                 ) {
                     QuickActionGridCard(
                         icon = MiuixIcons.Tune,
-                        accentColor = Color(0xFF06B6D4),
+                        accentColor = MiuixTheme.colorScheme.primary,
                         title = "터치 테스트",
                         subtitle = "실제 CPS · 분산 측정",
                         onClick = { onNavigateTab(2) },
@@ -221,7 +222,7 @@ fun HomeScreen(
                     )
                     QuickActionGridCard(
                         icon = MiuixIcons.Help,
-                        accentColor = Color(0xFF10B981),
+                        accentColor = MiuixTheme.colorScheme.primary,
                         title = "권한 · 가이드",
                         subtitle = "OneUI 제한 해제 안내",
                         onClick = { onNavigateTab(3) },
@@ -472,12 +473,12 @@ fun HomeScreen(
                                         }
                                         item {
                                             SquirclePillBadge(
-                                                text = "8단계 기본 초기화",
+                                                text = "전체 비우기",
                                                 backgroundColor = MiuixTheme.colorScheme.secondaryContainer,
                                                 contentColor = MiuixTheme.colorScheme.onSecondaryContainer,
                                                 onClick = {
                                                     onResetScenarioSteps()
-                                                    onNotify("기본 8단계(반복→감지→3클릭→스크롤→3클릭)로 복원했습니다.")
+                                                    onNotify("시나리오 단계를 모두 비웠습니다.")
                                                 }
                                             )
                                         }
@@ -486,13 +487,23 @@ fun HomeScreen(
                             }
                         }
 
-                        items(state.scenarioSteps, key = { it.id }) { step ->
-                            ScenarioStepRowCard(
-                                step = step,
-                                canMoveUp = step.order > 1,
-                                canMoveDown = step.order < state.scenarioSteps.size,
-                                canDelete = state.scenarioSteps.size > 1,
-                                onEdit = { editingScenarioStep = step },
+                        if (state.scenarioSteps.isEmpty()) {
+                            item(key = "scenario_empty_banner") {
+                                EmptyDataBanner(
+                                    icon = MiuixIcons.Favorites,
+                                    accentColor = MiuixTheme.colorScheme.primary,
+                                    title = "등록된 시나리오 단계가 없습니다",
+                                    subtitle = "위의 버튼으로 감지 반복, 클릭, 스크롤 단계를 추가해 구성하세요."
+                                )
+                            }
+                        } else {
+                            items(state.scenarioSteps, key = { it.id }) { step ->
+                                ScenarioStepRowCard(
+                                    step = step,
+                                    canMoveUp = step.order > 1,
+                                    canMoveDown = step.order < state.scenarioSteps.size,
+                                    canDelete = true,
+                                    onEdit = { editingScenarioStep = step },
                                 onQuickChangeScrollDirection = { newDir ->
                                     onUpdateScenarioStep(step.copy(scrollDirection = newDir))
                                     onNotify("단계 #${step.order} 스크롤 방향이 저장되었습니다.")
@@ -505,6 +516,7 @@ fun HomeScreen(
                                 },
                                 modifier = Modifier.animateItem()
                             )
+                        }
                         }
 
                         item(key = "scenario_repeat_rule") {
@@ -943,11 +955,7 @@ private fun RecentPresetsHomeSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(presets.take(6), key = { it.id }) { preset ->
-                    val modeAccent = when (preset.mode) {
-                        ClickMode.SINGLE -> MiuixTheme.colorScheme.primary
-                        ClickMode.MULTI -> Color(0xFF2B8A3E)
-                        ClickMode.SCENARIO -> Color(0xFF7C5CFF)
-                    }
+                    val modeAccent = MiuixTheme.colorScheme.primary
                     val intervalMs = ClickEngineCalculator.toMillis(
                         preset.timing.intervalValue,
                         preset.timing.intervalUnit
@@ -1026,7 +1034,7 @@ private fun ScenarioModeLaunchCard(
     onLaunchClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    val accent = Color(0xFF7C5CFF)
+    val accent = MiuixTheme.colorScheme.primary
     val actionBg by animateColorAsState(
         targetValue = if (isActive) Color(0xFFD93025).copy(alpha = 0.14f) else accent,
         animationSpec = tween(220),
@@ -1044,10 +1052,10 @@ private fun ScenarioModeLaunchCard(
     )
     val firstDetect = steps.firstOrNull { it.type == ScenarioStepType.REPEAT_UNTIL_DETECT }
     val detectNote = when {
+        steps.isEmpty() -> "단계 없음 (⚙ 눌러 추가)"
         firstDetect == null -> "${steps.size}단계 구성"
-        firstDetect.targetText.isNotBlank() -> "텍스트 '${firstDetect.targetText}'"
         !firstDetect.targetImagePath.isNullOrBlank() -> "업로드 이미지"
-        else -> "텍스트/이미지 미지정 (⚙ 설정 필요)"
+        else -> "이미지 미지정 (⚙ 설정 필요)"
     }
 
     Card(
@@ -1165,21 +1173,14 @@ private fun ScenarioStepRowCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val badgeColor = when (step.type) {
-        ScenarioStepType.REPEAT_UNTIL_DETECT -> Color(0xFF7C5CFF)
-        ScenarioStepType.SINGLE_TAP -> MiuixTheme.colorScheme.primary
-        ScenarioStepType.SCROLL -> Color(0xFF06B6D4)
-    }
+    val badgeColor = MiuixTheme.colorScheme.primary
     val detailText = when (step.type) {
         ScenarioStepType.REPEAT_UNTIL_DETECT -> {
-            val condLabel = buildList {
-                if (step.conditionType != DetectionConditionType.IMAGE_ONLY && step.targetText.isNotBlank()) {
-                    add("글자 '${step.targetText}'")
-                }
-                if (step.conditionType != DetectionConditionType.TEXT_ONLY && !step.targetImagePath.isNullOrBlank()) {
-                    add("이미지 ${step.imageSimilarityPercent}%")
-                }
-            }.joinToString(" 또는 ").ifEmpty { "실행 시 화면에서 감지 영역 선택" }
+            val condLabel = if (!step.targetImagePath.isNullOrBlank()) {
+                "이미지 ${step.imageSimilarityPercent}%"
+            } else {
+                "실행 시 화면에서 감지 영역 선택"
+            }
             "${step.repeatIntervalMs}ms 반복 · $condLabel · 후대기 ${step.postDelayMs}ms"
         }
         ScenarioStepType.SINGLE_TAP ->
@@ -1296,12 +1297,12 @@ private fun ScenarioStepRowCard(
                         SquirclePillBadge(
                             text = label,
                             backgroundColor = if (selected) {
-                                Color(0xFF06B6D4)
+                                MiuixTheme.colorScheme.primary
                             } else {
                                 MiuixTheme.colorScheme.secondaryContainer
                             },
                             contentColor = if (selected) {
-                                Color.White
+                                MiuixTheme.colorScheme.onPrimary
                             } else {
                                 MiuixTheme.colorScheme.onSecondaryContainer
                             },
@@ -1360,11 +1361,11 @@ private fun ScenarioRepeatRuleCard(
                         SquirclePillBadge(
                             text = "${cnt}사이클",
                             backgroundColor = if (selected) {
-                                Color(0xFF7C5CFF)
+                                MiuixTheme.colorScheme.primary
                             } else {
                                 MiuixTheme.colorScheme.secondaryContainer
                             },
-                            contentColor = if (selected) Color.White else MiuixTheme.colorScheme.onSecondaryContainer,
+                            contentColor = if (selected) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.onSecondaryContainer,
                             onClick = { onConfigChange(config.copy(repeatCount = cnt)) },
                             modifier = Modifier.weight(1f)
                         )
@@ -1382,11 +1383,11 @@ private fun ScenarioRepeatRuleCard(
                         SquirclePillBadge(
                             text = label,
                             backgroundColor = if (selected) {
-                                Color(0xFF7C5CFF)
+                                MiuixTheme.colorScheme.primary
                             } else {
                                 MiuixTheme.colorScheme.secondaryContainer
                             },
-                            contentColor = if (selected) Color.White else MiuixTheme.colorScheme.onSecondaryContainer,
+                            contentColor = if (selected) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.onSecondaryContainer,
                             onClick = {
                                 onConfigChange(
                                     config.copy(

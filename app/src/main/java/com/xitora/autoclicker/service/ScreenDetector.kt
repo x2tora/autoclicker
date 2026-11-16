@@ -11,7 +11,6 @@ import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.xitora.autoclicker.domain.ClickEngineCalculator
-import com.xitora.autoclicker.model.DetectionConditionType
 import com.xitora.autoclicker.model.ScenarioStep
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -47,106 +46,11 @@ object ScreenDetector {
         val variants: List<TemplatePatch>
     )
 
-    data class ScreenTextCandidate(
-        val text: String,
-        val bounds: Rect
-    )
-
     @Volatile
     private var cachedTemplateSet: CachedTemplateSet? = null
 
     fun hasValidDetectionTarget(step: ScenarioStep): Boolean {
-        return when (step.conditionType) {
-            DetectionConditionType.TEXT_ONLY -> step.targetText.isNotBlank()
-            DetectionConditionType.IMAGE_ONLY -> !step.targetImagePath.isNullOrBlank()
-            DetectionConditionType.TEXT_OR_IMAGE ->
-                step.targetText.isNotBlank() || !step.targetImagePath.isNullOrBlank()
-        }
-    }
-
-    private fun collectTargetAppRoots(service: AccessibilityService): List<AccessibilityNodeInfo> {
-        val ownPackage = service.packageName
-        val activeRoots = mutableListOf<AccessibilityNodeInfo>()
-        val fallbackRoots = mutableListOf<AccessibilityNodeInfo>()
-
-        runCatching {
-            service.windows?.forEach { window ->
-                if (window.type != AccessibilityWindowInfo.TYPE_APPLICATION) return@forEach
-                val root = window.root ?: return@forEach
-                if (root.packageName?.toString() != ownPackage) {
-                    if (window.isActive || window.isFocused) {
-                        activeRoots.add(root)
-                    } else {
-                        fallbackRoots.add(root)
-                    }
-                }
-            }
-        }
-
-        val roots = if (activeRoots.isNotEmpty()) activeRoots else fallbackRoots
-        if (roots.isEmpty()) {
-            runCatching {
-                service.rootInActiveWindow?.let { activeRoot ->
-                    if (activeRoot.packageName?.toString() != ownPackage) {
-                        roots.add(activeRoot)
-                    }
-                }
-            }
-        }
-        return roots
-    }
-
-    /**
-     * Collects visible leaf/text nodes and their screen bounding rectangles from the target app window
-     * (excluding full-window containers and system bars) so the user can tap or drag to select text.
-     */
-    fun collectScreenTextCandidates(service: AccessibilityService): List<ScreenTextCandidate> {
-        val roots = collectTargetAppRoots(service)
-        val dm = service.resources.displayMetrics
-        val screenArea = (dm.widthPixels.toLong() * dm.heightPixels.toLong()).coerceAtLeast(1L)
-        val maxCandidateArea = (screenArea * 0.28).toLong()
-
-        val queue = ArrayDeque<AccessibilityNodeInfo>(roots)
-        val results = mutableListOf<ScreenTextCandidate>()
-        val seenKeys = HashSet<String>()
-        var visited = 0
-
-        while (queue.isNotEmpty() && visited < MAX_TRAVERSED_NODES) {
-            val node = queue.removeFirst()
-            visited++
-
-            val childCount = runCatching { node.childCount }.getOrDefault(0)
-            runCatching {
-                if (node.isVisibleToUser) {
-                    val directText = node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-                    val leafDesc = if (childCount == 0) {
-                        node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-                    } else {
-                        null
-                    }
-                    val rawText = directText ?: leafDesc
-                    if (rawText != null && rawText.length <= 80) {
-                        val rect = Rect()
-                        node.getBoundsInScreen(rect)
-                        val area = rect.width().toLong() * rect.height().toLong()
-                        if (rect.width() > 10 && rect.height() > 10 && area in 101L..maxCandidateArea) {
-                            val key = "$rawText@${rect.left},${rect.top},${rect.right},${rect.bottom}"
-                            if (seenKeys.add(key)) {
-                                results.add(ScreenTextCandidate(text = rawText, bounds = rect))
-                            }
-                        }
-                    }
-                }
-            }
-
-            for (i in 0 until childCount) {
-                val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
-                queue.addLast(child)
-            }
-        }
-
-        // Sort smaller, more specific UI elements first so tapping inside a button hits the button text
-        return results.sortedBy { it.bounds.width().toLong() * it.bounds.height().toLong() }
+        return !step.targetImagePath.isNullOrBlank()
     }
 
     /**
@@ -182,31 +86,6 @@ object ScreenDetector {
                 screenBmp.recycle()
             }
         }
-    }
-
-    fun detectTextInService(service: AccessibilityService, query: String): Boolean {
-        if (query.isBlank()) return false
-        val roots = collectTargetAppRoots(service)
-
-        val queue = ArrayDeque<AccessibilityNodeInfo>(roots)
-        var visited = 0
-        while (queue.isNotEmpty() && visited < MAX_TRAVERSED_NODES) {
-            val node = queue.removeFirst()
-            visited++
-            val childCount = runCatching { node.childCount }.getOrDefault(0)
-            val matched = runCatching {
-                if (!node.isVisibleToUser) return@runCatching false
-                ClickEngineCalculator.matchesTargetText(node.text, query) ||
-                    (childCount == 0 && ClickEngineCalculator.matchesTargetText(node.contentDescription, query))
-            }.getOrDefault(false)
-            if (matched) return true
-
-            for (i in 0 until childCount) {
-                val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
-                queue.addLast(child)
-            }
-        }
-        return false
     }
 
     fun saveTemplateImageFromUri(context: Context, uri: Uri): String? {

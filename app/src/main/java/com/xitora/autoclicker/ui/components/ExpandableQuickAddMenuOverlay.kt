@@ -65,7 +65,7 @@ fun QuickAddMenuScrim(
 ) {
     val progress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.86f, stiffness = 400f),
+        animationSpec = spring(dampingRatio = 0.86f, stiffness = 210f),
         label = "quickMenuScrim"
     )
     if (!visible && progress <= 0.01f) return
@@ -97,7 +97,10 @@ fun BoxScope.ExpandableQuickAddMenuOverlay(
 ) {
     val progress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.84f, stiffness = 380f),
+        animationSpec = spring(
+            dampingRatio = if (visible) 0.72f else 0.84f,
+            stiffness = if (visible) 185f else 210f
+        ),
         label = "quickMenuMorph"
     )
     if (!visible && progress <= 0.01f) return

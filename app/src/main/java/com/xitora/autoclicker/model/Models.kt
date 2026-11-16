@@ -38,13 +38,6 @@ enum class ScenarioStepType(val label: String, val badgeSuffix: String) {
 }
 
 @Serializable
-enum class DetectionConditionType(val label: String) {
-    TEXT_OR_IMAGE("텍스트 또는 이미지 감지"),
-    TEXT_ONLY("화면 텍스트만 감지"),
-    IMAGE_ONLY("업로드 이미지만 감지")
-}
-
-@Serializable
 enum class ScrollDirection(val label: String, val arrowSymbol: String) {
     DOWN("스크롤 내리기 (아래 내용 보기 · 위로 드래그)", "↓"),
     UP("스크롤 올리기 (위 내용 보기 · 아래로 드래그)", "↑"),
@@ -63,8 +56,6 @@ data class ScenarioStep(
     val repeatIntervalMs: Long = 120L,
     val tapDurationMs: Long = 40L,
     val detectCheckIntervalMs: Long = 450L,
-    val conditionType: DetectionConditionType = DetectionConditionType.TEXT_OR_IMAGE,
-    val targetText: String = "",
     val targetImagePath: String? = null,
     val imageSimilarityPercent: Int = 85,
     val scrollDirection: ScrollDirection = ScrollDirection.DOWN,
@@ -161,7 +152,7 @@ data class AutoClickerDataState(
     val multiConfig: ClickTimingConfig = ClickTimingConfig(),
     val multiTargets: List<TargetPoint> = defaultMultiTargets(),
     val scenarioConfig: ClickTimingConfig = ClickTimingConfig(),
-    val scenarioSteps: List<ScenarioStep> = defaultScenarioSteps(),
+    val scenarioSteps: List<ScenarioStep> = emptyList(),
     val presets: List<ClickPreset> = emptyList(),
     val settings: AppSettings = AppSettings()
 )
@@ -169,85 +160,6 @@ data class AutoClickerDataState(
 fun defaultMultiTargets(): List<TargetPoint> = listOf(
     TargetPoint(id = "multi_target_1", order = 1, xPx = 360f, yPx = 980f),
     TargetPoint(id = "multi_target_2", order = 2, xPx = 700f, yPx = 1220f)
-)
-
-fun defaultScenarioSteps(): List<ScenarioStep> = listOf(
-    ScenarioStep(
-        id = "scenario_step_1",
-        order = 1,
-        title = "반복 터치 · 텍스트/이미지 감지 대기",
-        type = ScenarioStepType.REPEAT_UNTIL_DETECT,
-        xPx = 320f,
-        yPx = 920f,
-        repeatIntervalMs = 120L,
-        postDelayMs = 400L
-    ),
-    ScenarioStep(
-        id = "scenario_step_2",
-        order = 2,
-        title = "감지 후 1번째 위치 클릭",
-        type = ScenarioStepType.SINGLE_TAP,
-        xPx = 540f,
-        yPx = 760f,
-        postDelayMs = 450L
-    ),
-    ScenarioStep(
-        id = "scenario_step_3",
-        order = 3,
-        title = "2번째 위치 클릭",
-        type = ScenarioStepType.SINGLE_TAP,
-        xPx = 540f,
-        yPx = 920f,
-        postDelayMs = 450L
-    ),
-    ScenarioStep(
-        id = "scenario_step_4",
-        order = 4,
-        title = "3번째 위치 클릭",
-        type = ScenarioStepType.SINGLE_TAP,
-        xPx = 540f,
-        yPx = 1080f,
-        postDelayMs = 500L
-    ),
-    ScenarioStep(
-        id = "scenario_step_5",
-        order = 5,
-        title = "정해진 위치에서 스크롤 내리기",
-        type = ScenarioStepType.SCROLL,
-        xPx = 540f,
-        yPx = 1240f,
-        scrollDirection = ScrollDirection.DOWN,
-        scrollDistanceDp = 340,
-        scrollDurationMs = 360L,
-        postDelayMs = 600L
-    ),
-    ScenarioStep(
-        id = "scenario_step_6",
-        order = 6,
-        title = "스크롤 후 1번째 위치 클릭",
-        type = ScenarioStepType.SINGLE_TAP,
-        xPx = 540f,
-        yPx = 980f,
-        postDelayMs = 450L
-    ),
-    ScenarioStep(
-        id = "scenario_step_7",
-        order = 7,
-        title = "스크롤 후 2번째 위치 클릭",
-        type = ScenarioStepType.SINGLE_TAP,
-        xPx = 540f,
-        yPx = 1140f,
-        postDelayMs = 450L
-    ),
-    ScenarioStep(
-        id = "scenario_step_8",
-        order = 8,
-        title = "스크롤 후 3번째 위치 클릭",
-        type = ScenarioStepType.SINGLE_TAP,
-        xPx = 540f,
-        yPx = 1300f,
-        postDelayMs = 500L
-    )
 )
 
 data class OverlayRuntimeState(

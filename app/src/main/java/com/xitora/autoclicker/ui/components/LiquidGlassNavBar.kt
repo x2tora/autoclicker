@@ -8,6 +8,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -66,6 +67,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.intellij.lang.annotations.Language
 import top.yukonga.miuix.kmp.basic.Badge
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarDefaults
@@ -93,25 +95,25 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.random.Random
 
-private val DockHeight = 64.dp
+private val DockHeight = 62.dp
 private const val DockPressedScale = 1.04f
-private val DockBlurRadius = 14.dp
-private val DockRefractionHeight = 14.dp
-private val DockRefractionAmount = 10.dp
-private val DockChromaticAberration = 2.2.dp
+private val DockBlurRadius = 3.5.dp
+private val DockRefractionHeight = 12.dp
+private val DockRefractionAmount = 7.5.dp
+private val DockChromaticAberration = 2.4.dp
 
-private val DarkFrostedScrim = Color(0xFF141821).copy(alpha = 0.74f)
-private val LightFrostedScrim = Color.White.copy(alpha = 0.78f)
-private const val GlassGrainAlpha = 0.10f
+private val DarkFrostedScrim = Color(0xFF141821).copy(alpha = 0.68f)
+private val LightFrostedScrim = Color.White.copy(alpha = 0.70f)
+private const val GlassGrainAlpha = 0.08f
 private const val GRAIN_TILE = 96
 
-private val SliderInset = 5.dp
+private val SliderInset = 4.dp
 private val SliderDragStartSlop = 4.dp
-private val SliderRefractionHeight = 10.dp
-private val SliderRefractionAmount = 6.dp
-private val SliderChromaticAberration = 1.8.dp
-private val SliderPressedOverhang = 4.dp
-private const val SliderStretchMax = 0.22f
+private val SliderRefractionHeight = 6.dp
+private val SliderRefractionAmount = 4.5.dp
+private val SliderChromaticAberration = 1.6.dp
+private val SliderPressedOverhang = 1.5.dp
+private const val SliderStretchMax = 0.12f
 
 @Language("AGSL")
 private const val LIQUID_LENS_SHADER = """
@@ -229,14 +231,20 @@ fun Modifier.liquidGlassSurface(
 ): Modifier {
     val isDark = LocalIsDarkTheme.current
     val resolvedScrim = surfaceTint ?: if (isDark) DarkFrostedScrim else LightFrostedScrim
-    val resolvedFallback = fallbackColor ?: if (isDark) {
-        Color(0xFF141821).copy(alpha = 0.92f)
+    val resolvedFallback = if (fallbackColor != null) {
+        if (fallbackColor.alpha >= 0.99f) fallbackColor.copy(alpha = 0.94f) else fallbackColor
+    } else if (isDark) {
+        Color(0xFF141821).copy(alpha = 0.88f)
     } else {
-        Color.White.copy(alpha = 0.94f)
+        Color.White.copy(alpha = 0.90f)
     }
 
     if (backdrop == null || !isRuntimeShaderSupported() || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        return this.clip(shape).background(resolvedFallback)
+        val borderColor = MiuixTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.08f)
+        return this
+            .clip(shape)
+            .background(resolvedFallback)
+            .border(width = 0.75.dp, color = borderColor, shape = shape)
     }
 
     val grainBrush = rememberGrainBrush()
@@ -320,12 +328,22 @@ fun StandardMiuixNavBar(
     onToggleCenterAdd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    NavigationBar(
-        modifier = modifier,
-        showDivider = true,
-        defaultWindowInsetsPadding = true,
-        mode = NavigationBarDisplayMode.IconAndText
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MiuixTheme.colorScheme.surface)
     ) {
+        HorizontalDivider()
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            NavigationBar(
+                modifier = Modifier.widthIn(max = 560.dp),
+                showDivider = false,
+                defaultWindowInsetsPadding = true,
+                mode = NavigationBarDisplayMode.IconAndText
+            ) {
         NavigationBarItem(
             selected = !isCenterAddSelected && selectedTab == 0,
             onClick = { onSelectTab(0) },
@@ -353,7 +371,7 @@ fun StandardMiuixNavBar(
         val addPressed by addInteraction.collectIsPressedAsState()
         val addRotation by animateFloatAsState(
             targetValue = if (isCenterAddSelected) 45f else 0f,
-            animationSpec = spring(dampingRatio = 0.74f, stiffness = 420f),
+            animationSpec = spring(dampingRatio = 0.72f, stiffness = 210f),
             label = "miuixCenterAddRot"
         )
         val addAlpha = when {
@@ -418,6 +436,8 @@ fun StandardMiuixNavBar(
                 null
             }
         )
+            }
+        }
     }
 }
 
@@ -436,8 +456,8 @@ fun FloatingLiquidGlassNavBar(
     val barScale by animateFloatAsState(
         targetValue = if (barPressed) DockPressedScale else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
+            dampingRatio = 0.72f,
+            stiffness = 190f
         ),
         label = "dockPressScale"
     )
@@ -535,15 +555,15 @@ private fun LiquidGlassNavBarContent(
 
     val addRotation by animateFloatAsState(
         targetValue = if (isCenterAddSelected) 45f else 0f,
-        animationSpec = spring(dampingRatio = 0.74f, stiffness = 420f),
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 210f),
         label = "glassCenterAddRot"
     )
 
     val pressProgress by animateFloatAsState(
         targetValue = if (pressed) 1f else 0f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
+            dampingRatio = 0.70f,
+            stiffness = 220f
         ),
         label = "sliderPress"
     )
@@ -585,11 +605,16 @@ private fun LiquidGlassNavBarContent(
                 val minLeft = insetPx
                 val maxLeft = itemWidthPx * (slotCount - 1) + insetPx
                 val slopPx = with(density) { SliderDragStartSlop.toPx() }
+                val edgeGuardPx = with(density) { 16.dp.toPx() }
 
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    if (down.position.x < edgeGuardPx || down.position.x > barWidthPx - edgeGuardPx) {
+                        return@awaitEachGesture
+                    }
                     val pointerId = down.id
                     val startX = down.position.x
+                    val startY = down.position.y
                     var started = false
 
                     while (true) {
@@ -622,7 +647,11 @@ private fun LiquidGlassNavBarContent(
                         }
 
                         val dx = change.position.x - startX
+                        val dy = change.position.y - startY
                         if (!started) {
+                            if (abs(dy) > slopPx && abs(dy) > abs(dx)) {
+                                break
+                            }
                             if (abs(dx) < slopPx) continue
                             started = true
                             draggingState.value = true

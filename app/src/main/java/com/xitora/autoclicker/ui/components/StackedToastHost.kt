@@ -1,12 +1,12 @@
 package com.xitora.autoclicker.ui.components
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,7 +41,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.xitora.autoclicker.ui.theme.LocalAppBackdrop
 import com.xitora.autoclicker.ui.theme.LocalIsDarkTheme
+import com.xitora.autoclicker.ui.theme.LocalLiquidGlassEnabled
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
@@ -61,7 +63,8 @@ data class ToastEntry(
     val id: Long,
     val message: String,
     val durationMs: Long = 3400L,
-    val isExiting: Boolean = false
+    val isExiting: Boolean = false,
+    val exitDelayMs: Long = 0L
 )
 
 @Stable
@@ -82,7 +85,22 @@ class StackedToastState {
     fun requestDismiss(id: Long) {
         val idx = entries.indexOfFirst { it.id == id }
         if (idx >= 0 && !entries[idx].isExiting) {
-            entries[idx] = entries[idx].copy(isExiting = true)
+            entries[idx] = entries[idx].copy(isExiting = true, exitDelayMs = 0L)
+        }
+    }
+
+    fun requestDismissAllCascade(staggerMs: Long = 50L, skipId: Long? = null) {
+        var step = 0
+        for (i in entries.indices) {
+            val e = entries[i]
+            if (e.id == skipId) continue
+            if (!e.isExiting) {
+                entries[i] = e.copy(
+                    isExiting = true,
+                    exitDelayMs = step * staggerMs
+                )
+                step++
+            }
         }
     }
 
@@ -106,7 +124,7 @@ fun StackedToastHost(
     LaunchedEffect(frontEntry?.id, frontEntry?.isExiting) {
         if (frontEntry != null && !frontEntry.isExiting) {
             delay(frontEntry.durationMs)
-            state.requestDismiss(frontEntry.id)
+            state.requestDismissAllCascade(staggerMs = 55L)
         }
     }
 
@@ -126,16 +144,16 @@ fun StackedToastHost(
                 val animatedScale by animateFloatAsState(
                     targetValue = targetScale,
                     animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
+                        dampingRatio = 0.74f,
+                        stiffness = 195f
                     ),
                     label = "toastDeckScale"
                 )
                 val animatedOffsetY by animateDpAsState(
                     targetValue = targetOffsetY,
                     animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
+                        dampingRatio = 0.74f,
+                        stiffness = 195f
                     ),
                     label = "toastDeckOffsetY"
                 )
@@ -149,7 +167,11 @@ fun StackedToastHost(
                     message = item.message,
                     isFront = depth == 0,
                     isExiting = item.isExiting,
+                    exitDelayMs = item.exitDelayMs,
                     deckAlpha = animatedAlpha,
+                    onSwipeStartDismissStack = {
+                        state.requestDismissAllCascade(staggerMs = 45L, skipId = item.id)
+                    },
                     onRemove = { state.dismiss(item.id) },
                     modifier = Modifier
                         .zIndex((visibleEntries.size - depth).toFloat())
@@ -169,23 +191,34 @@ private fun SwipeableToastCard(
     message: String,
     isFront: Boolean,
     isExiting: Boolean,
+    exitDelayMs: Long,
     deckAlpha: Float,
+    onSwipeStartDismissStack: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isDark = LocalIsDarkTheme.current
+    val backdrop = LocalAppBackdrop.current
+    val liquidGlassEnabled = LocalLiquidGlassEnabled.current
     val scope = rememberCoroutineScope()
     val dragX = remember { Animatable(0f) }
     val fadeAnim = remember { Animatable(0f) }
+    val exitShiftY = remember { Animatable(0f) }
     var cardWidthPx by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
-        fadeAnim.animateTo(1f, animationSpec = tween(durationMillis = 220))
+        fadeAnim.animateTo(1f, animationSpec = tween(durationMillis = 240))
     }
 
     LaunchedEffect(isExiting) {
         if (isExiting) {
-            fadeAnim.animateTo(0f, animationSpec = tween(durationMillis = 220))
+            if (exitDelayMs > 0L) {
+                delay(exitDelayMs)
+            }
+            launch {
+                exitShiftY.animateTo(22f, animationSpec = tween(durationMillis = 200))
+            }
+            fadeAnim.animateTo(0f, animationSpec = tween(durationMillis = 200))
             onRemove()
         }
     }
@@ -202,12 +235,31 @@ private fun SwipeableToastCard(
     }
     val borderColor = MiuixTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.09f)
     val corner = 18.dp
+    val surfaceModifier = if (liquidGlassEnabled && backdrop != null) {
+        Modifier.liquidGlassSurface(
+            backdrop = backdrop,
+            shape = RoundedCornerShape(corner),
+            blurRadius = 2.5.dp,
+            refractionHeight = 8.dp,
+            refractionAmount = 5.dp,
+            chromaticAberration = 1.6.dp,
+            refraction = true,
+            surfaceTint = containerColor.copy(alpha = if (isDark) 0.68f else 0.72f),
+            grainAlpha = 0.06f,
+            fallbackColor = containerColor.copy(alpha = 0.92f)
+        )
+    } else {
+        Modifier
+            .squircleClip(corner)
+            .squircleBackground(color = containerColor, cornerRadius = corner)
+            .squircleBorder(width = 0.75.dp, color = borderColor, cornerRadius = corner)
+    }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .onSizeChanged { cardWidthPx = it.width }
-            .offset { IntOffset(dragX.value.roundToInt(), 0) }
+            .offset { IntOffset(dragX.value.roundToInt(), exitShiftY.value.roundToInt()) }
             .alpha(combinedAlpha)
             .dropShadow(
                 shape = RoundedCornerShape(corner),
@@ -217,55 +269,58 @@ private fun SwipeableToastCard(
                     alpha = if (isDark) 0.34f else 0.13f
                 )
             )
-            .squircleClip(corner)
-            .squircleBackground(color = containerColor, cornerRadius = corner)
-            .squircleBorder(width = 0.75.dp, color = borderColor, cornerRadius = corner)
+            .then(surfaceModifier)
             .then(
                 if (isFront && !isExiting) {
-                    Modifier.pointerInput(Unit) {
-                        detectHorizontalDragGestures(
-                            onDragEnd = {
-                                val current = dragX.value
-                                val threshold = size.width * 0.22f
-                                if (abs(current) > threshold) {
-                                    val direction = if (current == 0f) 1f else sign(current)
-                                    scope.launch {
-                                        dragX.animateTo(
-                                            targetValue = direction * size.width * 0.9f,
-                                            animationSpec = tween(durationMillis = 200)
-                                        )
-                                        onRemove()
+                    Modifier
+                        .pointerInput(Unit) {
+                            detectTapGestures { }
+                        }
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    val current = dragX.value
+                                    val threshold = size.width * 0.22f
+                                    if (abs(current) > threshold) {
+                                        val direction = if (current == 0f) 1f else sign(current)
+                                        onSwipeStartDismissStack()
+                                        scope.launch {
+                                            dragX.animateTo(
+                                                targetValue = direction * size.width * 0.9f,
+                                                animationSpec = tween(durationMillis = 200)
+                                            )
+                                            onRemove()
+                                        }
+                                    } else {
+                                        scope.launch {
+                                            dragX.animateTo(
+                                                targetValue = 0f,
+                                                animationSpec = spring(
+                                                    dampingRatio = 0.72f,
+                                                    stiffness = 200f
+                                                )
+                                            )
+                                        }
                                     }
-                                } else {
+                                },
+                                onDragCancel = {
                                     scope.launch {
                                         dragX.animateTo(
                                             targetValue = 0f,
                                             animationSpec = spring(
-                                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                stiffness = Spring.StiffnessMediumLow
+                                                dampingRatio = 0.72f,
+                                                stiffness = 200f
                                             )
                                         )
                                     }
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    scope.launch {
+                                        dragX.snapTo(dragX.value + dragAmount)
+                                    }
                                 }
-                            },
-                            onDragCancel = {
-                                scope.launch {
-                                    dragX.animateTo(
-                                        targetValue = 0f,
-                                        animationSpec = spring(
-                                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                                            stiffness = Spring.StiffnessMediumLow
-                                        )
-                                    )
-                                }
-                            },
-                            onHorizontalDrag = { _, dragAmount ->
-                                scope.launch {
-                                    dragX.snapTo(dragX.value + dragAmount)
-                                }
-                            }
-                        )
-                    }
+                            )
+                        }
                 } else {
                     Modifier
                 }

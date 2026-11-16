@@ -4,11 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,9 +21,12 @@ import androidx.compose.ui.unit.dp
 import com.xitora.autoclicker.BuildConfig
 import com.xitora.autoclicker.model.*
 import com.xitora.autoclicker.ui.components.AppUpdateUiState
+import com.xitora.autoclicker.ui.components.ConfirmActionDialog
 import com.xitora.autoclicker.ui.components.MiuixColorPickerDialog
 import com.xitora.autoclicker.ui.components.MiuixGlassIcon
 import com.xitora.autoclicker.ui.components.formatRgbHex
+import com.xitora.autoclicker.ui.theme.AccentPresetPalette
+import com.xitora.autoclicker.ui.theme.AutoClickerMotion
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.*
@@ -127,7 +125,7 @@ fun MoreSettingsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateContentSize()
+                    .animateContentSize(animationSpec = AutoClickerMotion.LayoutSizeSpring)
             ) {
                 val options = ThemeOption.entries
                 OverlayDropdownPreference(
@@ -163,14 +161,14 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Favorites,
                             contentDescription = null,
-                            accentColor = Color(0xFF7C5CFF)
+                            accentColor = MiuixTheme.colorScheme.primary
                         )
                     }
                 )
                 AnimatedVisibility(
                     visible = colorStyle == ThemeColorStyle.CUSTOM,
-                    enter = expandVertically(tween(220)) + fadeIn(tween(220)),
-                    exit = shrinkVertically(tween(180)) + fadeOut(tween(180))
+                    enter = AutoClickerMotion.expandEnter(),
+                    exit = AutoClickerMotion.shrinkExit()
                 ) {
                     Column {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
@@ -209,7 +207,7 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Tune,
                             contentDescription = null,
-                            accentColor = Color(0xFF06B6D4)
+                            accentColor = MiuixTheme.colorScheme.primary
                         )
                     }
                 )
@@ -246,14 +244,14 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Location,
                             contentDescription = null,
-                            accentColor = Color(0xFF3482FF)
+                            accentColor = MiuixTheme.colorScheme.primary
                         )
                     }
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 SwitchPreference(
                     title = "봇 방지 랜덤 영역 점선 원 표시",
-                    summary = "랜덤 클릭 기능이 켜져 있을 때 타겟 주위에 점선 가이드를 그립니다",
+                    summary = "랜덤 클릭 활성화 시 타겟 주위에 점선 가이드를 표시",
                     checked = state.settings.showAntiBotZoneGuide,
                     onCheckedChange = onUpdateShowAntiBotZoneGuide,
                     insideMargin = preferenceMargin,
@@ -261,7 +259,7 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Stopwatch,
                             contentDescription = null,
-                            accentColor = Color(0xFF06B6D4)
+                            accentColor = MiuixTheme.colorScheme.primary
                         )
                     }
                 )
@@ -283,7 +281,7 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Backup,
                             contentDescription = null,
-                            accentColor = Color(0xFF3482FF)
+                            accentColor = MiuixTheme.colorScheme.primary
                         )
                     }
                 )
@@ -299,7 +297,7 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Import,
                             contentDescription = null,
-                            accentColor = Color(0xFF10B981)
+                            accentColor = MiuixTheme.colorScheme.primary
                         )
                     }
                 )
@@ -313,7 +311,7 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Copy,
                             contentDescription = null,
-                            accentColor = Color(0xFF06B6D4)
+                            accentColor = MiuixTheme.colorScheme.primary
                         )
                     }
                 )
@@ -392,7 +390,7 @@ fun MoreSettingsScreen(
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
                 text = "과녁 크기: ${state.settings.targetSizeDp}dp",
-                style = MiuixTheme.textStyles.body2
+                style = MiuixTheme.textStyles.body2.copy(fontFeatureSettings = "tnum")
             )
             Slider(
                 value = state.settings.targetSizeDp.toFloat(),
@@ -402,7 +400,7 @@ fun MoreSettingsScreen(
             )
             Text(
                 text = "과녁 불투명도: ${state.settings.targetOpacityPercent}%",
-                style = MiuixTheme.textStyles.body2
+                style = MiuixTheme.textStyles.body2.copy(fontFeatureSettings = "tnum")
             )
             Slider(
                 value = state.settings.targetOpacityPercent.toFloat(),
@@ -460,27 +458,16 @@ fun MoreSettingsScreen(
         }
     }
 
-    OverlayDialog(
+    ConfirmActionDialog(
         show = showResetConfirm,
         title = "전체 데이터 초기화",
         summary = "저장된 모든 타겟 설정과 프리셋이 초기화됩니다. 계속할까요?",
-        onDismissRequest = { showResetConfirm = false }
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(text = "취소", onClick = { showResetConfirm = false }, modifier = Modifier.weight(1f))
-            TextButton(
-                text = "초기화",
-                onClick = {
-                    onResetAllData()
-                    showResetConfirm = false
-                    onNotify("모든 데이터가 초기화되었습니다.")
-                },
-                colors = ButtonDefaults.textButtonColors(
-                    color = MiuixTheme.colorScheme.error,
-                    textColor = Color.White
-                ),
-                modifier = Modifier.weight(1f)
-            )
+        confirmText = "초기화",
+        isDestructive = true,
+        onDismiss = { showResetConfirm = false },
+        onConfirm = {
+            onResetAllData()
+            onNotify("모든 데이터가 초기화되었습니다.")
         }
-    }
+    )
 }

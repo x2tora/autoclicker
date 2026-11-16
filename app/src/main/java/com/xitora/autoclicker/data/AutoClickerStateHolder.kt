@@ -252,10 +252,9 @@ class AutoClickerStateHolder private constructor(context: Context) {
                     )
                 }
                 ClickMode.SCENARIO -> {
-                    val steps = preset.scenarioSteps.ifEmpty { defaultScenarioSteps() }
                     s.copy(
                         scenarioConfig = preset.timing,
-                        scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(steps)
+                        scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(preset.scenarioSteps)
                     )
                 }
             }
@@ -354,11 +353,11 @@ class AutoClickerStateHolder private constructor(context: Context) {
         AutoClickAccessibilityService.instance?.syncFromState()
     }
 
-    fun resetScenarioToDefault8Steps() {
+    fun clearScenarioSteps() {
         commit { s ->
             s.copy(
                 scenarioConfig = ClickTimingConfig(),
-                scenarioSteps = defaultScenarioSteps()
+                scenarioSteps = emptyList()
             )
         }
         AutoClickAccessibilityService.instance?.syncFromState()
@@ -376,8 +375,7 @@ class AutoClickerStateHolder private constructor(context: Context) {
             _state.update {
                 val safeMulti = if (restored.multiTargets.isEmpty()) defaultMultiTargets()
                 else ClickEngineCalculator.reindexTargets(restored.multiTargets)
-                val safeScenario = if (restored.scenarioSteps.isEmpty()) defaultScenarioSteps()
-                else ClickEngineCalculator.reindexScenarioSteps(restored.scenarioSteps)
+                val safeScenario = ClickEngineCalculator.reindexScenarioSteps(restored.scenarioSteps)
                 val normalized = restored.copy(multiTargets = safeMulti, scenarioSteps = safeScenario)
                 repository.saveState(normalized)
                 normalized

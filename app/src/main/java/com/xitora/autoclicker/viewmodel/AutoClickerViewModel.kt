@@ -121,7 +121,7 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun moveScenarioStep(stepId: String, moveUp: Boolean) = stateHolder.moveScenarioStep(stepId, moveUp)
 
-    fun resetScenarioToDefault8Steps() = stateHolder.resetScenarioToDefault8Steps()
+    fun clearScenarioSteps() = stateHolder.clearScenarioSteps()
 
     fun savePreset(name: String, mode: ClickMode): ClickPreset = stateHolder.savePreset(name, mode)
 

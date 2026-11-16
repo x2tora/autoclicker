@@ -10,7 +10,6 @@ import com.xitora.autoclicker.data.AutoClickerStateHolder
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.domain.ScenarioDetectGuard
 import com.xitora.autoclicker.model.ClickMode
-import com.xitora.autoclicker.model.DetectionConditionType
 import com.xitora.autoclicker.model.ScenarioStep
 import com.xitora.autoclicker.model.ScenarioStepType
 import kotlinx.coroutines.*
@@ -310,18 +309,7 @@ class AutoClickAccessibilityService : AccessibilityService() {
                                                 var detected = false
                                                 var evaluated = false
 
-                                                if (liveStep.conditionType != DetectionConditionType.IMAGE_ONLY &&
-                                                    liveStep.targetText.isNotBlank()
-                                                ) {
-                                                    evaluated = true
-                                                    detected = ScreenDetector.detectTextInService(
-                                                        service = this@AutoClickAccessibilityService,
-                                                        query = liveStep.targetText
-                                                    )
-                                                }
-                                                if (!detected &&
-                                                    liveStep.conditionType != DetectionConditionType.TEXT_ONLY &&
-                                                    !liveStep.targetImagePath.isNullOrBlank() &&
+                                                if (!liveStep.targetImagePath.isNullOrBlank() &&
                                                     nowMs - lastScreenshotCheckMs >= 1100L
                                                 ) {
                                                     lastScreenshotCheckMs = nowMs
@@ -447,32 +435,15 @@ class AutoClickAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Collects visible text regions on the active screen and displays an interactive overlay
-     * so the user can tap or drag over the area to detect, saving it as [ScenarioStep.targetText]
-     * (or cropped image template) and optionally resuming scenario execution immediately.
+     * Displays an interactive overlay so the user can drag over the target area to detect,
+     * saving it as a cropped image template ([ScenarioStep.targetImagePath]) and optionally
+     * resuming scenario execution immediately.
      */
     fun promptDetectionTargetPicker(step: ScenarioStep, resumeAfterSave: Boolean) {
         if (!::overlayController.isInitialized) return
-        val candidates = ScreenDetector.collectScreenTextCandidates(this)
         overlayController.openDetectionTargetPicker(
             step = step,
-            candidates = candidates,
             resumeAfterSave = resumeAfterSave,
-            onSaveText = { chosenText ->
-                stateHolder.updateScenarioStep(
-                    step.copy(
-                        targetText = chosenText,
-                        conditionType = if (step.conditionType == DetectionConditionType.IMAGE_ONLY) {
-                            DetectionConditionType.TEXT_OR_IMAGE
-                        } else {
-                            step.conditionType
-                        }
-                    )
-                )
-                if (resumeAfterSave) {
-                    startClicking()
-                }
-            },
             onSaveCropRect = { cropRect ->
                 serviceScope.launch {
                     overlayController.setAllOverlaysTemporarilyHidden(true)
@@ -487,14 +458,7 @@ class AutoClickAccessibilityService : AccessibilityService() {
                     }
                     if (savedPath != null) {
                         stateHolder.updateScenarioStep(
-                            step.copy(
-                                targetImagePath = savedPath,
-                                conditionType = if (step.conditionType == DetectionConditionType.TEXT_ONLY) {
-                                    DetectionConditionType.TEXT_OR_IMAGE
-                                } else {
-                                    step.conditionType
-                                }
-                            )
+                            step.copy(targetImagePath = savedPath)
                         )
                         if (resumeAfterSave) {
                             startClicking()

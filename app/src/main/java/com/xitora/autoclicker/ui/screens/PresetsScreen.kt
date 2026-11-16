@@ -24,6 +24,7 @@ import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.AutoClickerDataState
 import com.xitora.autoclicker.model.ClickMode
 import com.xitora.autoclicker.model.ClickPreset
+import com.xitora.autoclicker.ui.components.ConfirmActionDialog
 import com.xitora.autoclicker.ui.components.EmptyDataBanner
 import com.xitora.autoclicker.ui.components.MiuixGlassIcon
 import com.xitora.autoclicker.ui.components.SquirclePillBadge
@@ -73,6 +74,7 @@ fun PresetsScreen(
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     var selectedFilter by remember { mutableStateOf(PresetFilter.ALL) }
+    var deletingPreset by remember { mutableStateOf<ClickPreset?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var renamingPreset by remember { mutableStateOf<ClickPreset?>(null) }
     var exportingPreset by remember { mutableStateOf<ClickPreset?>(null) }
@@ -158,14 +160,14 @@ fun PresetsScreen(
                         PresetQuickSaveTile(
                             title = "다중 저장",
                             icon = MiuixIcons.Layers,
-                            accentColor = Color(0xFF2B8A3E),
+                            accentColor = MiuixTheme.colorScheme.primary,
                             onClick = onSaveCurrentMulti,
                             modifier = Modifier.weight(1f)
                         )
                         PresetQuickSaveTile(
                             title = "시나리오 저장",
                             icon = MiuixIcons.Favorites,
-                            accentColor = Color(0xFF7C5CFF),
+                            accentColor = MiuixTheme.colorScheme.primary,
                             onClick = onSaveCurrentScenario,
                             modifier = Modifier.weight(1f)
                         )
@@ -275,11 +277,7 @@ fun PresetsScreen(
             }
         } else {
             items(filteredPresets, key = { it.id }) { preset ->
-                val accent = when (preset.mode) {
-                    ClickMode.SINGLE -> MiuixTheme.colorScheme.primary
-                    ClickMode.MULTI -> Color(0xFF2B8A3E)
-                    ClickMode.SCENARIO -> Color(0xFF7C5CFF)
-                }
+                val accent = MiuixTheme.colorScheme.primary
                 val icon = when (preset.mode) {
                     ClickMode.SINGLE -> MiuixIcons.Location
                     ClickMode.MULTI -> MiuixIcons.Layers
@@ -347,11 +345,11 @@ fun PresetsScreen(
                                     tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                 )
                             }
-                            IconButton(onClick = { onDeletePreset(preset.id) }) {
+                            IconButton(onClick = { deletingPreset = preset }) {
                                 Icon(
                                     imageVector = MiuixIcons.Delete,
                                     contentDescription = "프리셋 삭제",
-                                    tint = Color(0xFFD93025)
+                                    tint = MiuixTheme.colorScheme.error
                                 )
                             }
                         }
@@ -539,6 +537,18 @@ fun PresetsScreen(
                 }
             }
         }
+    }
+
+    deletingPreset?.let { targetPreset ->
+        ConfirmActionDialog(
+            show = true,
+            title = "프리셋 삭제",
+            summary = "'${targetPreset.name}' 프리셋을 삭제합니다. 계속할까요?",
+            confirmText = "삭제",
+            isDestructive = true,
+            onDismiss = { deletingPreset = null },
+            onConfirm = { onDeletePreset(targetPreset.id) }
+        )
     }
 }
 

@@ -463,22 +463,15 @@ class OverlayController(
 
     fun openDetectionTargetPicker(
         step: ScenarioStep,
-        candidates: List<ScreenDetector.ScreenTextCandidate>,
         resumeAfterSave: Boolean,
-        onSaveText: (String) -> Unit,
         onSaveCropRect: (Rect) -> Unit
     ) {
         dismissModal()
         val pickerView = OverlayModalFactory.buildScreenDetectionPickerOverlay(
             context = serviceContext,
             step = step,
-            candidates = candidates,
             isDark = isEffectiveDark(),
             resumeAfterSave = resumeAfterSave,
-            onSaveText = { chosenText ->
-                dismissModal()
-                onSaveText(chosenText)
-            },
             onSaveCropRect = { rect ->
                 dismissModal()
                 onSaveCropRect(rect)
