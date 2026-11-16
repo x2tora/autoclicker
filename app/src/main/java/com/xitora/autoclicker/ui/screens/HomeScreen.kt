@@ -149,7 +149,7 @@ fun HomeScreen(
                     summaryLine1 = "${state.multiTargets.size}개 지점 · 간격 ${multiIntervalMs}ms",
                     summaryLine2 = ClickEngineCalculator.formatRepeatSummary(state.multiConfig),
                     icon = MiuixIcons.Layers,
-                    accentColor = MiuixTheme.colorScheme.primary,
+                    accentColor = Color(0xFF2B8A3E),
                     isActive = isMultiActive,
                     isAccessibilityEnabled = runtime.isAccessibilityEnabled,
                     onLaunchClick = { onLaunchMode(ClickMode.MULTI) },
@@ -191,7 +191,7 @@ fun HomeScreen(
                 ) {
                     QuickActionGridCard(
                         icon = MiuixIcons.Favorites,
-                        accentColor = MiuixTheme.colorScheme.primary,
+                        accentColor = Color(0xFFF59E0B),
                         title = "프리셋 저장",
                         subtitle = if (isMultiActive) "다중 타겟 구성" else "단일 타겟 구성",
                         onClick = {
@@ -214,7 +214,7 @@ fun HomeScreen(
                 ) {
                     QuickActionGridCard(
                         icon = MiuixIcons.Tune,
-                        accentColor = MiuixTheme.colorScheme.primary,
+                        accentColor = Color(0xFF06B6D4),
                         title = "터치 테스트",
                         subtitle = "실제 CPS · 분산 측정",
                         onClick = { onNavigateTab(2) },
@@ -222,7 +222,7 @@ fun HomeScreen(
                     )
                     QuickActionGridCard(
                         icon = MiuixIcons.Help,
-                        accentColor = MiuixTheme.colorScheme.primary,
+                        accentColor = Color(0xFF10B981),
                         title = "권한 · 가이드",
                         subtitle = "OneUI 제한 해제 안내",
                         onClick = { onNavigateTab(3) },
@@ -955,7 +955,11 @@ private fun RecentPresetsHomeSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(presets.take(6), key = { it.id }) { preset ->
-                    val modeAccent = MiuixTheme.colorScheme.primary
+                    val modeAccent = when (preset.mode) {
+                        ClickMode.SINGLE -> MiuixTheme.colorScheme.primary
+                        ClickMode.MULTI -> Color(0xFF2B8A3E)
+                        ClickMode.SCENARIO -> Color(0xFF7C5CFF)
+                    }
                     val intervalMs = ClickEngineCalculator.toMillis(
                         preset.timing.intervalValue,
                         preset.timing.intervalUnit
@@ -1034,7 +1038,7 @@ private fun ScenarioModeLaunchCard(
     onLaunchClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    val accent = MiuixTheme.colorScheme.primary
+    val accent = Color(0xFF7C5CFF)
     val actionBg by animateColorAsState(
         targetValue = if (isActive) Color(0xFFD93025).copy(alpha = 0.14f) else accent,
         animationSpec = tween(220),
@@ -1070,7 +1074,7 @@ private fun ScenarioModeLaunchCard(
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             MiuixGlassIcon(
@@ -1173,7 +1177,11 @@ private fun ScenarioStepRowCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val badgeColor = MiuixTheme.colorScheme.primary
+    val badgeColor = when (step.type) {
+        ScenarioStepType.REPEAT_UNTIL_DETECT -> Color(0xFF7C5CFF)
+        ScenarioStepType.SINGLE_TAP -> MiuixTheme.colorScheme.primary
+        ScenarioStepType.SCROLL -> Color(0xFF06B6D4)
+    }
     val detailText = when (step.type) {
         ScenarioStepType.REPEAT_UNTIL_DETECT -> {
             val condLabel = if (!step.targetImagePath.isNullOrBlank()) {

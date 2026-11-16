@@ -160,14 +160,14 @@ fun PresetsScreen(
                         PresetQuickSaveTile(
                             title = "다중 저장",
                             icon = MiuixIcons.Layers,
-                            accentColor = MiuixTheme.colorScheme.primary,
+                            accentColor = Color(0xFF2B8A3E),
                             onClick = onSaveCurrentMulti,
                             modifier = Modifier.weight(1f)
                         )
                         PresetQuickSaveTile(
                             title = "시나리오 저장",
                             icon = MiuixIcons.Favorites,
-                            accentColor = MiuixTheme.colorScheme.primary,
+                            accentColor = Color(0xFF7C5CFF),
                             onClick = onSaveCurrentScenario,
                             modifier = Modifier.weight(1f)
                         )
@@ -277,7 +277,11 @@ fun PresetsScreen(
             }
         } else {
             items(filteredPresets, key = { it.id }) { preset ->
-                val accent = MiuixTheme.colorScheme.primary
+                val accent = when (preset.mode) {
+                    ClickMode.SINGLE -> MiuixTheme.colorScheme.primary
+                    ClickMode.MULTI -> Color(0xFF2B8A3E)
+                    ClickMode.SCENARIO -> Color(0xFF7C5CFF)
+                }
                 val icon = when (preset.mode) {
                     ClickMode.SINGLE -> MiuixIcons.Location
                     ClickMode.MULTI -> MiuixIcons.Layers
@@ -293,7 +297,7 @@ fun PresetsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             MiuixGlassIcon(

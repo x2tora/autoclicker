@@ -450,15 +450,13 @@ private fun MainTabsHost(
             val isSingleVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.SINGLE
             val isMultiVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.MULTI
             val isScenarioVisible = runtime.isOverlayVisible && runtime.activeMode == ClickMode.SCENARIO
-            val primaryAccent = MiuixTheme.colorScheme.primary
             val quickMenuActions = remember(
                 isSingleVisible,
                 isMultiVisible,
                 isScenarioVisible,
                 runtime.isOverlayVisible,
                 runtime.isClicking,
-                runtime.activeMode,
-                primaryAccent
+                runtime.activeMode
             ) {
                 buildList {
                     add(
@@ -467,7 +465,7 @@ private fun MainTabsHost(
                             title = if (isSingleVisible) "단일 타겟 오버레이 닫기" else "단일 타겟 오버레이 실행",
                             subtitle = if (isSingleVisible) "화면의 단일 타겟 패널을 종료합니다" else "1개 포인트 반복 터치 패널 띄우기",
                             icon = MiuixIcons.Location,
-                            accentColor = primaryAccent,
+                            accentColor = Color(0xFF3482FF),
                             onClick = { handleLaunchOrToggleOverlay(ClickMode.SINGLE) }
                         )
                     )
@@ -477,7 +475,7 @@ private fun MainTabsHost(
                             title = if (isMultiVisible) "다중 타겟 오버레이 닫기" else "다중 타겟 오버레이 실행",
                             subtitle = if (isMultiVisible) "화면의 다중 타겟 패널을 종료합니다" else "순서대로 여러 지점 자동 터치 실행",
                             icon = MiuixIcons.Layers,
-                            accentColor = primaryAccent,
+                            accentColor = Color(0xFF2B8A3E),
                             onClick = { handleLaunchOrToggleOverlay(ClickMode.MULTI) }
                         )
                     )
@@ -487,7 +485,7 @@ private fun MainTabsHost(
                             title = if (isScenarioVisible) "시나리오 오버레이 닫기" else "시나리오 매크로 실행",
                             subtitle = if (isScenarioVisible) "조건 감지 매크로 패널을 종료합니다" else "이미지 감지 + 클릭/스크롤 루프",
                             icon = MiuixIcons.Favorites,
-                            accentColor = primaryAccent,
+                            accentColor = Color(0xFF7C5CFF),
                             onClick = { handleLaunchOrToggleOverlay(ClickMode.SCENARIO) }
                         )
                     )
@@ -509,7 +507,7 @@ private fun MainTabsHost(
                                 title = "현재 설정 프리셋 저장",
                                 subtitle = "${runtime.activeMode.label} 설정을 보관함에 기록",
                                 icon = MiuixIcons.Favorites,
-                                accentColor = primaryAccent,
+                                accentColor = Color(0xFFF59E0B),
                                 onClick = { presetSaveMode = runtime.activeMode }
                             )
                         )

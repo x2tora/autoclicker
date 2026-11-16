@@ -212,7 +212,7 @@ private fun QuickMenuActionRow(
             size = 38.dp,
             iconSize = 19.dp
         )
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(14.dp))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(1.dp)

@@ -139,7 +139,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Theme,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )
@@ -161,7 +162,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Favorites,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = Color(0xFF7C5CFF),
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )
@@ -181,6 +183,7 @@ fun MoreSettingsScreen(
                             startAction = {
                                 Box(
                                     modifier = Modifier
+                                        .padding(end = 6.dp)
                                         .size(32.dp)
                                         .clip(CircleShape)
                                         .background(Color(previewHex))
@@ -207,7 +210,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Tune,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = Color(0xFF06B6D4),
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )
@@ -230,7 +234,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Settings,
                             contentDescription = null,
-                            accentColor = if (isAccessibilityEnabled) Color(0xFF10B981) else Color(0xFFF59E0B)
+                            accentColor = if (isAccessibilityEnabled) Color(0xFF10B981) else Color(0xFFF59E0B),
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )
@@ -244,7 +249,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Location,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = Color(0xFF3482FF),
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )
@@ -259,7 +265,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Stopwatch,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = Color(0xFF06B6D4),
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )
@@ -281,7 +288,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Backup,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = Color(0xFF3482FF),
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )
@@ -297,7 +305,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Import,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = Color(0xFF10B981),
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )
@@ -311,7 +320,8 @@ fun MoreSettingsScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Copy,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = Color(0xFF06B6D4),
+                            modifier = Modifier.padding(end = 6.dp)
                         )
                     }
                 )

@@ -435,7 +435,8 @@ fun ClickTimingEditorSection(
                     MiuixGlassIcon(
                         icon = MiuixIcons.Stopwatch,
                         contentDescription = null,
-                        accentColor = MiuixTheme.colorScheme.primary
+                        accentColor = Color(0xFF06B6D4),
+                        modifier = Modifier.padding(end = 6.dp)
                     )
                 }
             )

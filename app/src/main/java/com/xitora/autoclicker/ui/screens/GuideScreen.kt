@@ -134,7 +134,7 @@ fun GuideScreen(
             ) {
                 GuideRow(
                     icon = MiuixIcons.Play,
-                    accent = MiuixTheme.colorScheme.primary,
+                    accent = Color(0xFF2B8A3E),
                     title = "시작 / 일시정지 (▶ / ⏸)",
                     subtitle = "설정된 간격(ms)과 종료 조건에 따라 자동 클릭을 시작하거나 멈춥니다."
                 )
@@ -148,7 +148,7 @@ fun GuideScreen(
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 GuideRow(
                     icon = MiuixIcons.Settings,
-                    accent = MiuixTheme.colorScheme.primary,
+                    accent = Color(0xFF06B6D4),
                     title = "패널 설정 · 타겟 직접 탭",
                     subtitle = "컨트롤 패널의 ⚙ 또는 화면 위 과녁 번호를 짧게 눌러 타이밍을 바로 바꿀 수 있습니다."
                 )
@@ -174,9 +174,9 @@ fun GuideScreen(
                         MiuixGlassIcon(
                             icon = MiuixIcons.Stopwatch,
                             contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
+                            accentColor = Color(0xFF06B6D4)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
                                 text = "1:1 비율 랜덤 영역 미리보기",
@@ -199,7 +199,7 @@ fun GuideScreen(
                         Icon(
                             imageVector = MiuixIcons.Layers,
                             contentDescription = null,
-                            tint = MiuixTheme.colorScheme.primary,
+                            tint = Color(0xFF2B8A3E),
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -233,7 +233,7 @@ private fun GuideRow(
             contentDescription = null,
             accentColor = accent
         )
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(14.dp))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
