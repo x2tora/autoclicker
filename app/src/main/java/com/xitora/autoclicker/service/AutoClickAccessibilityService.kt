@@ -14,6 +14,8 @@ import com.xitora.autoclicker.model.DetectionConditionType
 import com.xitora.autoclicker.model.ScenarioStep
 import com.xitora.autoclicker.model.ScenarioStepType
 import kotlinx.coroutines.*
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
 class AutoClickAccessibilityService : AccessibilityService() {
@@ -289,70 +291,85 @@ class AutoClickAccessibilityService : AccessibilityService() {
                                         )
                                         return@launch
                                     }
-                                    var lastCondCheckMs = SystemClock.elapsedRealtime()
-                                    var lastScreenshotCheckMs = 0L
-                                    var tapsInStep = 0
+                                    val tapsInStep = AtomicInteger(0)
                                     val detectGuard = ScenarioDetectGuard()
                                     val detectPollMs = liveStep.detectCheckIntervalMs.coerceAtLeast(200L)
                                     val repeatDelayMs = liveStep.repeatIntervalMs.coerceAtLeast(20L)
                                     val tapMs = liveStep.tapDurationMs.coerceIn(10L, 60_000L)
 
-                                    while (isActive && stateHolder.runtime.value.isClicking) {
-                                        val nowMs = SystemClock.elapsedRealtime()
-                                        if (tapsInStep >= 1 && nowMs - lastCondCheckMs >= detectPollMs) {
-                                            lastCondCheckMs = nowMs
-                                            var detected = false
-                                            var evaluated = false
-                                            if (liveStep.conditionType != DetectionConditionType.IMAGE_ONLY &&
-                                                liveStep.targetText.isNotBlank()
-                                            ) {
-                                                evaluated = true
-                                                detected = ScreenDetector.detectTextInService(
-                                                    service = this@AutoClickAccessibilityService,
-                                                    query = liveStep.targetText
-                                                )
-                                            }
-                                            if (!detected &&
-                                                liveStep.conditionType != DetectionConditionType.TEXT_ONLY &&
-                                                !liveStep.targetImagePath.isNullOrBlank() &&
-                                                nowMs - lastScreenshotCheckMs >= 1100L
-                                            ) {
-                                                lastScreenshotCheckMs = nowMs
-                                                val imgMatched = ScreenDetector.detectImageInService(
-                                                    service = this@AutoClickAccessibilityService,
-                                                    imagePath = liveStep.targetImagePath,
-                                                    similarityPercent = liveStep.imageSimilarityPercent
-                                                )
-                                                if (imgMatched != null) {
+                                    val conditionMatched = AtomicBoolean(false)
+
+                                    // Run text/image detection asynchronously so repeat taps never stutter or wait on screenshots.
+                                    val detectJob = serviceScope.launch(Dispatchers.Default) {
+                                        var lastScreenshotCheckMs = 0L
+                                        delay(detectPollMs)
+                                        while (isActive && stateHolder.runtime.value.isClicking && !conditionMatched.get()) {
+                                            val currentTaps = tapsInStep.get()
+                                            if (currentTaps >= 1) {
+                                                val nowMs = SystemClock.elapsedRealtime()
+                                                var detected = false
+                                                var evaluated = false
+
+                                                if (liveStep.conditionType != DetectionConditionType.IMAGE_ONLY &&
+                                                    liveStep.targetText.isNotBlank()
+                                                ) {
                                                     evaluated = true
-                                                    detected = imgMatched
+                                                    detected = ScreenDetector.detectTextInService(
+                                                        service = this@AutoClickAccessibilityService,
+                                                        query = liveStep.targetText
+                                                    )
+                                                }
+                                                if (!detected &&
+                                                    liveStep.conditionType != DetectionConditionType.TEXT_ONLY &&
+                                                    !liveStep.targetImagePath.isNullOrBlank() &&
+                                                    nowMs - lastScreenshotCheckMs >= 1100L
+                                                ) {
+                                                    lastScreenshotCheckMs = nowMs
+                                                    val imgMatched = ScreenDetector.detectImageInService(
+                                                        service = this@AutoClickAccessibilityService,
+                                                        imagePath = liveStep.targetImagePath,
+                                                        similarityPercent = liveStep.imageSimilarityPercent
+                                                    )
+                                                    if (imgMatched != null) {
+                                                        evaluated = true
+                                                        detected = imgMatched
+                                                    }
+                                                }
+                                                if (evaluated && detectGuard.onConditionEvaluated(detected, currentTaps)) {
+                                                    conditionMatched.set(true)
+                                                    break
                                                 }
                                             }
-                                            if (!isActive || !stateHolder.runtime.value.isClicking) break
-                                            if (evaluated && detectGuard.onConditionEvaluated(detected, tapsInStep)) {
-                                                delay(liveStep.postDelayMs.coerceAtLeast(20L))
-                                                break
+                                            delay(detectPollMs)
+                                        }
+                                    }
+
+                                    try {
+                                        while (isActive && stateHolder.runtime.value.isClicking && !conditionMatched.get()) {
+                                            val (tapX, tapY) = ClickEngineCalculator.computeClickCoordinate(
+                                                xPx = cx,
+                                                yPx = cy,
+                                                antiBotEnabled = liveStep.antiBotRandomEnabled,
+                                                radiusPx = radiusPx,
+                                                screenWidth = sw,
+                                                screenHeight = sh
+                                            )
+                                            performTapGesture(tapX, tapY, tapMs)
+                                            if (!stateHolder.runtime.value.isClicking || conditionMatched.get()) break
+
+                                            tapsInStep.incrementAndGet()
+                                            val loopElapsed = SystemClock.elapsedRealtime() - startRealtime
+                                            stateHolder.updateRuntime {
+                                                it.copy(clickCount = it.clickCount + 1L, elapsedMs = loopElapsed)
                                             }
+                                            overlayController.updateStatusReadout(completedCycles)
+                                            delay(repeatDelayMs)
                                         }
-
-                                        val (tapX, tapY) = ClickEngineCalculator.computeClickCoordinate(
-                                            xPx = cx,
-                                            yPx = cy,
-                                            antiBotEnabled = liveStep.antiBotRandomEnabled,
-                                            radiusPx = radiusPx,
-                                            screenWidth = sw,
-                                            screenHeight = sh
-                                        )
-                                        performTapGesture(tapX, tapY, tapMs)
-                                        if (!stateHolder.runtime.value.isClicking) break
-
-                                        tapsInStep++
-                                        val loopElapsed = SystemClock.elapsedRealtime() - startRealtime
-                                        stateHolder.updateRuntime {
-                                            it.copy(clickCount = it.clickCount + 1L, elapsedMs = loopElapsed)
-                                        }
-                                        overlayController.updateStatusReadout(completedCycles)
-                                        delay(repeatDelayMs)
+                                    } finally {
+                                        detectJob.cancel()
+                                    }
+                                    if (conditionMatched.get() && isActive && stateHolder.runtime.value.isClicking) {
+                                        delay(liveStep.postDelayMs.coerceAtLeast(20L))
                                     }
                                 }
                                 ScenarioStepType.SINGLE_TAP -> {
