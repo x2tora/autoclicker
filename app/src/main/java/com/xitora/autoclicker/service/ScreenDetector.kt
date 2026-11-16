@@ -32,8 +32,8 @@ import kotlin.math.roundToInt
 object ScreenDetector {
     private const val MAX_TRAVERSED_NODES = 1500
     private const val MAX_SAVED_IMAGE_DIM = 1080
-    private const val MATCH_SCALE = 0.28f
-    private val MULTI_SCALES = floatArrayOf(1.0f, 0.85f, 1.18f)
+    private const val MATCH_SCALE = 0.35f
+    private val MULTI_SCALES = floatArrayOf(1.0f, 0.85f, 1.15f, 0.72f, 1.32f)
 
     data class TemplatePatch(
         val width: Int,
@@ -146,7 +146,7 @@ object ScreenDetector {
 
                 var bestScore = 0
                 for (tpl in variants) {
-                    val adaptiveStride = if (min(tpl.width, tpl.height) >= 16) 2 else 1
+                    val adaptiveStride = if (min(tpl.width, tpl.height) >= 28) 2 else 1
                     val score = computeTemplateMatchScore(
                         screenPixels = screenPixels,
                         screenW = sw,
@@ -471,7 +471,7 @@ object ScreenDetector {
             } else {
                 val zncc = (num / kotlin.math.sqrt(varT * varS)).coerceIn(0.0, 1.0)
                 val znccPct = (zncc * 100.0).roundToInt().coerceIn(0, 100)
-                if (znccPct < 45) 0 else ((l1Score * 0.45) + (znccPct * 0.55)).roundToInt().coerceIn(0, 100)
+                if (znccPct < 45) 0 else ((l1Score * 0.35) + (znccPct * 0.65)).roundToInt().coerceIn(0, 100)
             }
             if (candidateScore > bestOverallScore) {
                 bestOverallScore = candidateScore
