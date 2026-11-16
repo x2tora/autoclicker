@@ -234,17 +234,20 @@ object ScreenDetector {
         }.getOrNull()
     }
 
+    /**
+     * Returns true/false when a screenshot was captured and compared, or null if screenshot capture failed.
+     */
     suspend fun detectImageInService(
         service: AccessibilityService,
         imagePath: String?,
         similarityPercent: Int
-    ): Boolean {
+    ): Boolean? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || imagePath.isNullOrBlank()) return false
         val file = File(imagePath)
         if (!file.exists()) return false
 
         val threshold = similarityPercent.coerceIn(50, 99)
-        val screenBmp = captureSoftwareScreenBitmap(service) ?: return false
+        val screenBmp = captureSoftwareScreenBitmap(service) ?: return null
         return withContext(Dispatchers.Default) {
             try {
                 val sw = (screenBmp.width * MATCH_SCALE).roundToInt().coerceAtLeast(16)
@@ -421,6 +424,8 @@ object ScreenDetector {
         val fineY = fineYList.toIntArray()
         val fineRgb = fineColors.toIntArray()
 
+        var bestFineX = bestCoarseX
+        var bestFineY = bestCoarseY
         var bestFineDiff = Long.MAX_VALUE
         val minRefineX = (bestCoarseX - coarseStep).coerceAtLeast(0)
         val maxRefineX = (bestCoarseX + coarseStep).coerceAtMost(maxX)
@@ -440,6 +445,8 @@ object ScreenDetector {
                 }
                 if (diff < bestFineDiff) {
                     bestFineDiff = diff
+                    bestFineX = rx
+                    bestFineY = ry
                 }
             }
         }
@@ -447,6 +454,39 @@ object ScreenDetector {
         val maxPossibleDiff = fineCount.toLong() * 3L * 255L
         if (maxPossibleDiff <= 0L || bestFineDiff == Long.MAX_VALUE) return 0
         val errorPct = (bestFineDiff * 100L) / maxPossibleDiff
-        return (100L - errorPct).toInt().coerceIn(0, 100)
+        val l1Score = (100L - errorPct).toInt().coerceIn(0, 100)
+
+        // Structural ZNCC check prevents plain/solid backgrounds from falsely scoring 85%+ against UI buttons with text.
+        var sumT = 0.0
+        var sumS = 0.0
+        for (i in 0 until fineCount) {
+            val t = fineRgb[i]
+            val s = screenPixels[(bestFineY + fineY[i]) * screenW + (bestFineX + fineX[i])]
+            sumT += ((t shr 16) and 0xFF) * 0.299 + ((t shr 8) and 0xFF) * 0.587 + (t and 0xFF) * 0.114
+            sumS += ((s shr 16) and 0xFF) * 0.299 + ((s shr 8) and 0xFF) * 0.587 + (s and 0xFF) * 0.114
+        }
+        val meanT = sumT / fineCount
+        val meanS = sumS / fineCount
+        var num = 0.0
+        var varT = 0.0
+        var varS = 0.0
+        for (i in 0 until fineCount) {
+            val t = fineRgb[i]
+            val s = screenPixels[(bestFineY + fineY[i]) * screenW + (bestFineX + fineX[i])]
+            val lumT = ((t shr 16) and 0xFF) * 0.299 + ((t shr 8) and 0xFF) * 0.587 + (t and 0xFF) * 0.114 - meanT
+            val lumS = ((s shr 16) and 0xFF) * 0.299 + ((s shr 8) and 0xFF) * 0.587 + (s and 0xFF) * 0.114 - meanS
+            num += lumT * lumS
+            varT += lumT * lumT
+            varS += lumS * lumS
+        }
+        if (varT < 1.0) {
+            return l1Score
+        }
+        if (varS < 1.0) {
+            return 0
+        }
+        val zncc = (num / kotlin.math.sqrt(varT * varS)).coerceIn(0.0, 1.0)
+        val znccPct = (zncc * 100.0).roundToInt().coerceIn(0, 100)
+        return min(l1Score, znccPct)
     }
 }

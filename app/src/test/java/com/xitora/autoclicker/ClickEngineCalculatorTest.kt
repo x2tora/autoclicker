@@ -251,6 +251,17 @@ class ClickEngineCalculatorTest {
         val whiteTpl = IntArray(tplW * tplH) { 0xFFFFFFFF.toInt() }
         val mismatchScore = ScreenDetector.computeTemplateMatchScore(darkScreen, screenW, screenH, whiteTpl, tplW, tplH)
         assertTrue("Expected low mismatch score but got $mismatchScore", mismatchScore < 20)
+
+        // A light button containing dark text must NOT match a plain white background
+        val lightButtonWithText = IntArray(tplW * tplH) { 0xFFF5F5F5.toInt() }
+        for (i in 2 until 8) {
+            lightButtonWithText[5 * tplW + i] = 0xFF202020.toInt()
+        }
+        val plainWhiteScreen = IntArray(screenW * screenH) { 0xFFFFFFFF.toInt() }
+        val falsePositiveScore = ScreenDetector.computeTemplateMatchScore(
+            plainWhiteScreen, screenW, screenH, lightButtonWithText, tplW, tplH
+        )
+        assertTrue("Expected structural mismatch on plain screen, got $falsePositiveScore", falsePositiveScore < 50)
     }
 
     @Test

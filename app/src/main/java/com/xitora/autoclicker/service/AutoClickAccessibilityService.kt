@@ -317,13 +317,16 @@ class AutoClickAccessibilityService : AccessibilityService() {
                                                 !liveStep.targetImagePath.isNullOrBlank() &&
                                                 nowMs - lastScreenshotCheckMs >= 1100L
                                             ) {
-                                                evaluated = true
                                                 lastScreenshotCheckMs = nowMs
-                                                detected = ScreenDetector.detectImageInService(
+                                                val imgMatched = ScreenDetector.detectImageInService(
                                                     service = this@AutoClickAccessibilityService,
                                                     imagePath = liveStep.targetImagePath,
                                                     similarityPercent = liveStep.imageSimilarityPercent
                                                 )
+                                                if (imgMatched != null) {
+                                                    evaluated = true
+                                                    detected = imgMatched
+                                                }
                                             }
                                             if (!isActive || !stateHolder.runtime.value.isClicking) break
                                             if (evaluated && detectGuard.onConditionEvaluated(detected, tapsInStep)) {
