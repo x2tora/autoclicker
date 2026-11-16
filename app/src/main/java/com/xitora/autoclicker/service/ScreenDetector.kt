@@ -33,8 +33,8 @@ import kotlin.math.roundToInt
 object ScreenDetector {
     private const val MAX_TRAVERSED_NODES = 1500
     private const val MAX_SAVED_IMAGE_DIM = 1080
-    private const val MATCH_SCALE = 0.38f
-    private val MULTI_SCALES = floatArrayOf(1.0f, 0.88f, 1.12f, 0.75f, 1.28f, 0.62f, 1.45f)
+    private const val MATCH_SCALE = 0.28f
+    private val MULTI_SCALES = floatArrayOf(1.0f, 0.85f, 1.18f)
 
     data class TemplatePatch(
         val width: Int,
@@ -267,6 +267,7 @@ object ScreenDetector {
 
                 var bestScore = 0
                 for (tpl in variants) {
+                    val adaptiveStride = if (min(tpl.width, tpl.height) >= 16) 2 else 1
                     val score = computeTemplateMatchScore(
                         screenPixels = screenPixels,
                         screenW = sw,
@@ -274,12 +275,12 @@ object ScreenDetector {
                         tplPixels = tpl.pixels,
                         tplW = tpl.width,
                         tplH = tpl.height,
-                        stride = 1
+                        stride = adaptiveStride
                     )
                     if (score > bestScore) {
                         bestScore = score
                     }
-                    if (bestScore >= threshold + 4) break
+                    if (bestScore >= threshold) break
                 }
                 bestScore >= threshold
             } finally {
