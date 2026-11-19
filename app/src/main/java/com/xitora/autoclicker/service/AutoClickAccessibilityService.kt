@@ -429,7 +429,7 @@ class AutoClickAccessibilityService : AccessibilityService() {
             stateHolder.updateRuntime { it.copy(isClicking = false) }
         }
         if (::overlayController.isInitialized) {
-            overlayController.setTargetsTouchThrough(false)
+            overlayController.setTargetsTouchThrough(stateHolder.state.value.settings.isOverlayLocked)
             overlayController.updateStatusReadout(completedCycles)
         }
     }

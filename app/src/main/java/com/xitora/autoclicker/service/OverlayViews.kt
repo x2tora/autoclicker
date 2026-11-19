@@ -243,6 +243,7 @@ class FloatingControlPanelView(
     context: Context,
     private val onCloseClick: () -> Unit,
     private val onSettingsClick: () -> Unit,
+    private val onToggleLockClick: () -> Unit,
     private val onAddTargetClick: () -> Unit,
     private val onRemoveTargetClick: () -> Unit,
     private val onToggleRunClick: () -> Unit,
@@ -251,6 +252,7 @@ class FloatingControlPanelView(
 
     private val closeBtn: IconCanvasButton
     private val settingsBtn: IconCanvasButton
+    private val lockBtn: IconCanvasButton
     private val addBtn: IconCanvasButton
     private val removeBtn: IconCanvasButton
     private val playPauseBtn: PlayPauseCanvasButton
@@ -289,6 +291,12 @@ class FloatingControlPanelView(
                 topMargin = context.dpToPxInt(6f)
             }
             setOnClickListener { onSettingsClick() }
+        }
+        lockBtn = IconCanvasButton(context, IconKind.LOCK).apply {
+            layoutParams = LayoutParams(btnSize, btnSize).apply {
+                topMargin = context.dpToPxInt(6f)
+            }
+            setOnClickListener { onToggleLockClick() }
         }
         addBtn = IconCanvasButton(context, IconKind.ADD).apply {
             layoutParams = LayoutParams(btnSize, btnSize).apply {
@@ -344,6 +352,7 @@ class FloatingControlPanelView(
 
         addView(closeBtn)
         addView(settingsBtn)
+        addView(lockBtn)
         addView(addBtn)
         addView(removeBtn)
         addView(playPauseBtn)
@@ -360,19 +369,24 @@ class FloatingControlPanelView(
         completedCycles: Long,
         activeConfig: ClickTimingConfig,
         isDarkSurface: Boolean,
+        isLocked: Boolean = false,
         currentScenarioStepOrder: Int = 1,
         totalScenarioSteps: Int = 0,
         lastDetectScore: Int? = null
     ) {
         val showMultiControls = mode == ClickMode.MULTI || mode == ClickMode.SCENARIO
+        val editBlocked = isRunning || isLocked
         addBtn.visibility = if (showMultiControls) VISIBLE else GONE
         removeBtn.visibility = if (showMultiControls) VISIBLE else GONE
-        addBtn.isEnabled = !isRunning
-        removeBtn.isEnabled = !isRunning
-        addBtn.alpha = if (isRunning) 0.42f else 1f
-        removeBtn.alpha = if (isRunning) 0.42f else 1f
-        settingsBtn.isEnabled = !isRunning
-        settingsBtn.alpha = if (isRunning) 0.48f else 1f
+        addBtn.isEnabled = !editBlocked
+        removeBtn.isEnabled = !editBlocked
+        addBtn.alpha = if (editBlocked) 0.42f else 1f
+        removeBtn.alpha = if (editBlocked) 0.42f else 1f
+        settingsBtn.isEnabled = !editBlocked
+        settingsBtn.alpha = if (editBlocked) 0.42f else 1f
+        lockBtn.isEnabled = !isRunning
+        lockBtn.alpha = if (isRunning) 0.42f else 1f
+        lockBtn.isActive = isLocked
 
         playPauseBtn.isRunning = isRunning
         elapsedLabel.text = ClickEngineCalculator.formatElapsedMmSs(elapsedMs)
@@ -401,6 +415,7 @@ class FloatingControlPanelView(
             countLabel.setTextColor(labelCol)
             closeBtn.customTint = Color.parseColor("#B4B4BC")
             settingsBtn.customTint = Color.parseColor("#B4B4BC")
+            lockBtn.customTint = Color.parseColor("#B4B4BC")
         } else {
             bg?.setColor(Color.argb(246, 250, 251, 253))
             bg?.setStroke(context.dpToPxInt(1f), Color.argb(32, 36, 82, 122))
@@ -410,6 +425,7 @@ class FloatingControlPanelView(
             countLabel.setTextColor(labelCol)
             closeBtn.customTint = null
             settingsBtn.customTint = null
+            lockBtn.customTint = null
         }
     }
 
@@ -462,7 +478,7 @@ class FloatingControlPanelView(
         return super.onTouchEvent(event)
     }
 
-    private enum class IconKind { CLOSE, SETTINGS, ADD, REMOVE }
+    private enum class IconKind { CLOSE, SETTINGS, LOCK, ADD, REMOVE }
 
     @SuppressLint("ViewConstructor")
     private class IconCanvasButton(
@@ -473,6 +489,13 @@ class FloatingControlPanelView(
             set(value) {
                 field = value
                 invalidate()
+            }
+        var isActive: Boolean = false
+            set(value) {
+                if (field != value) {
+                    field = value
+                    invalidate()
+                }
             }
 
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -525,6 +548,38 @@ class FloatingControlPanelView(
                     paint.strokeWidth = context.dpToPx(3.3f)
                     paint.color = Color.parseColor("#D94B64")
                     canvas.drawLine(cx - r, cy, cx + r, cy, paint)
+                }
+                IconKind.LOCK -> {
+                    val activeAmber = Color.parseColor("#F59E0B")
+                    val col = if (isActive) activeAmber else (customTint ?: Color.parseColor("#24527A"))
+                    paint.color = col
+                    val bodyW = r * 1.55f
+                    val bodyH = r * 1.15f
+                    val bodyTop = cy - bodyH * 0.12f
+                    val bodyRect = RectF(cx - bodyW / 2f, bodyTop, cx + bodyW / 2f, bodyTop + bodyH)
+                    val corner = context.dpToPx(2.8f)
+
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = context.dpToPx(2.3f)
+                    val shackleW = bodyW * 0.56f
+                    val shackleTop = bodyTop - r * 0.72f
+                    val shackleRect = RectF(
+                        cx - shackleW / 2f,
+                        shackleTop,
+                        cx + shackleW / 2f,
+                        bodyTop + r * 0.45f
+                    )
+                    if (isActive) {
+                        canvas.drawArc(shackleRect, 180f, 180f, false, paint)
+                        canvas.drawLine(shackleRect.left, bodyTop, shackleRect.left, shackleRect.centerY(), paint)
+                        canvas.drawLine(shackleRect.right, bodyTop, shackleRect.right, shackleRect.centerY(), paint)
+                        paint.style = Paint.Style.FILL
+                        canvas.drawRoundRect(bodyRect, corner, corner, paint)
+                    } else {
+                        canvas.drawArc(shackleRect, 180f, 145f, false, paint)
+                        canvas.drawLine(shackleRect.left, bodyTop, shackleRect.left, shackleRect.centerY(), paint)
+                        canvas.drawRoundRect(bodyRect, corner, corner, paint)
+                    }
                 }
             }
         }

@@ -134,7 +134,8 @@ data class AppSettings(
     val navBarStyle: NavBarStyle = NavBarStyle.MIUIX,
     val targetSizeDp: Int = 46,
     val targetOpacityPercent: Int = 92,
-    val showAntiBotZoneGuide: Boolean = true
+    val showAntiBotZoneGuide: Boolean = true,
+    val isOverlayLocked: Boolean = false
 ) {
     fun resolvedColorStyle(): ThemeColorStyle = themeColorStyle
     fun resolvedNavBarStyle(): NavBarStyle = navBarStyle

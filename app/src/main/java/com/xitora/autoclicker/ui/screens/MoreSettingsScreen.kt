@@ -55,6 +55,7 @@ fun MoreSettingsScreen(
     onUpdateTargetSizeDp: (Int) -> Unit,
     onUpdateTargetOpacity: (Int) -> Unit,
     onUpdateShowAntiBotZoneGuide: (Boolean) -> Unit,
+    onUpdateOverlayLocked: (Boolean) -> Unit,
     onExportJson: () -> String,
     onImportJson: (String) -> Result<Unit>,
     onResetAllData: () -> Unit,
@@ -266,6 +267,22 @@ fun MoreSettingsScreen(
                             icon = MiuixIcons.Stopwatch,
                             contentDescription = null,
                             accentColor = Color(0xFF06B6D4),
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                SwitchPreference(
+                    title = "오버레이 타겟 위치 잠금",
+                    summary = "화면에 배치된 타겟을 실수로 이동·터치하지 않도록 잠급니다",
+                    checked = state.settings.isOverlayLocked,
+                    onCheckedChange = onUpdateOverlayLocked,
+                    insideMargin = preferenceMargin,
+                    startAction = {
+                        MiuixGlassIcon(
+                            icon = MiuixIcons.Lock,
+                            contentDescription = null,
+                            accentColor = Color(0xFFF59E0B),
                             modifier = Modifier.padding(end = 6.dp)
                         )
                     }

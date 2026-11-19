@@ -107,6 +107,10 @@ class OverlayController(
             context = serviceContext,
             onCloseClick = onCloseOverlay,
             onSettingsClick = { openModeSettingsModal() },
+            onToggleLockClick = {
+                val cur = stateHolder.state.value.settings.isOverlayLocked
+                stateHolder.updateSettings { it.copy(isOverlayLocked = !cur) }
+            },
             onAddTargetClick = {
                 val (sw, sh) = screenDimensions()
                 val mode = stateHolder.runtime.value.activeMode
@@ -201,6 +205,7 @@ class OverlayController(
             }
         }
         val isRunning = stateHolder.runtime.value.isClicking
+        val isLocked = isRunning || data.settings.isOverlayLocked
 
         // Remove existing targets cleanly
         targetHolders.forEach { holder ->
@@ -243,7 +248,7 @@ class OverlayController(
                     openSingleTargetModal(pt)
                 }
             ).apply {
-                isLockedForClicking = isRunning
+                isLockedForClicking = isLocked
             }
 
             val winSize = reticleView.requiredWindowSizePx()
@@ -251,7 +256,7 @@ class OverlayController(
             val clampedX = target.xPx.coerceIn(36f, (screenW - 36).toFloat())
             val clampedY = target.yPx.coerceIn(60f, (screenH - 60).toFloat())
 
-            val flags = baseTargetFlags(isRunning)
+            val flags = baseTargetFlags(isLocked)
             val lp = WindowManager.LayoutParams(
                 winSize,
                 winSize,
@@ -335,6 +340,7 @@ class OverlayController(
             completedCycles = completedCycles,
             activeConfig = activeConfig,
             isDarkSurface = isEffectiveDark(),
+            isLocked = data.settings.isOverlayLocked,
             currentScenarioStepOrder = rt.currentScenarioStepOrder,
             totalScenarioSteps = data.scenarioSteps.size,
             lastDetectScore = rt.lastDetectScore

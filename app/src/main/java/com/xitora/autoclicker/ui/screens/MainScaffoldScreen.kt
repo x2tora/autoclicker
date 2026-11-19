@@ -633,6 +633,7 @@ private fun SettingsScreenHost(
                 onUpdateTargetSizeDp = viewModel::updateTargetSizeDp,
                 onUpdateTargetOpacity = viewModel::updateTargetOpacity,
                 onUpdateShowAntiBotZoneGuide = viewModel::updateShowAntiBotZoneGuide,
+                onUpdateOverlayLocked = viewModel::updateOverlayLocked,
                 onExportJson = viewModel::exportBackupJson,
                 onImportJson = viewModel::importBackupJson,
                 onResetAllData = viewModel::resetAllData,

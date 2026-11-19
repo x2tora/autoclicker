@@ -143,6 +143,9 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
     fun updateNavBarStyle(style: NavBarStyle) =
         stateHolder.updateSettings { it.copy(navBarStyle = style) }
 
+    fun updateOverlayLocked(locked: Boolean) =
+        stateHolder.updateSettings { it.copy(isOverlayLocked = locked) }
+
     fun updateCustomKeyColor(colorHex: Long?) =
         stateHolder.updateSettings {
             it.copy(
