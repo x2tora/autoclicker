@@ -32,9 +32,20 @@ enum class ClickMode(val label: String) {
 
 @Serializable
 enum class ScenarioStepType(val label: String, val badgeSuffix: String) {
-    REPEAT_UNTIL_DETECT("반복 터치 + 조건 감지 대기", "🔄"),
+    REPEAT_UNTIL_DETECT("반복 터치 + 이미지 감지", "🔄"),
     SINGLE_TAP("지정 위치 1회 클릭", ""),
-    SCROLL("지정 위치 스크롤", "↕")
+    SCROLL("지정 위치 스크롤", "↕"),
+    WAIT_FOR_IMAGE("이미지 대기 (클릭 없음)", "⏳"),
+    TAP_DETECTED_IMAGE("감지된 이미지 위치 클릭", "🎯"),
+    LONG_PRESS("길게 누르기 (롱프레스)", "✊"),
+    DELAY_RANDOM("랜덤 시간 대기", "⏱"),
+    COLOR_MATCH("픽셀 색상 감지 대기", "🎨")
+}
+
+@Serializable
+enum class MultiImageLogic(val label: String) {
+    ANY("하나라도 감지 (OR)"),
+    ALL("모두 감지 (AND)")
 }
 
 @Serializable
@@ -44,6 +55,14 @@ enum class ScrollDirection(val label: String, val arrowSymbol: String) {
     LEFT("왼쪽으로 넘기기 (우→좌 드래그)", "←"),
     RIGHT("오른쪽으로 넘기기 (좌→우 드래그)", "→")
 }
+
+@Serializable
+data class NormalizedRect(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+)
 
 @Serializable
 data class ScenarioStep(
@@ -57,18 +76,36 @@ data class ScenarioStep(
     val tapDurationMs: Long = 40L,
     val detectCheckIntervalMs: Long = 450L,
     val targetImagePath: String? = null,
+    val extraImagePaths: List<String> = emptyList(),
+    val matchLogic: MultiImageLogic = MultiImageLogic.ANY,
+    val invertCondition: Boolean = false,
     val imageSimilarityPercent: Int = 78,
+    val detectRoiRectNorm: NormalizedRect? = null,
+    val detectTimeoutMs: Long = 0L,
+    val onMatchJumpOrder: Int? = null,
+    val onTimeoutJumpOrder: Int? = null,
+    val delayMinMs: Long = 300L,
+    val delayMaxMs: Long = 800L,
+    val targetColorHex: Long? = null,
+    val colorTolerance: Int = 24,
     val scrollDirection: ScrollDirection = ScrollDirection.DOWN,
     val scrollDistanceDp: Int = 340,
     val scrollDurationMs: Long = 360L,
     val postDelayMs: Long = 450L,
     val antiBotRandomEnabled: Boolean = false,
-    val randomRadiusDp: Int = 18
+    val randomRadiusDp: Int = 18,
+    val intervalJitterPercent: Int = 0,
+    val enabled: Boolean = true
 ) {
     fun badgeText(): String = when (type) {
         ScenarioStepType.REPEAT_UNTIL_DETECT -> "${order}🔄"
         ScenarioStepType.SINGLE_TAP -> order.toString()
         ScenarioStepType.SCROLL -> "${order}${scrollDirection.arrowSymbol}"
+        ScenarioStepType.WAIT_FOR_IMAGE -> "${order}⏳"
+        ScenarioStepType.TAP_DETECTED_IMAGE -> "${order}🎯"
+        ScenarioStepType.LONG_PRESS -> "${order}✊"
+        ScenarioStepType.DELAY_RANDOM -> "${order}⏱"
+        ScenarioStepType.COLOR_MATCH -> "${order}🎨"
     }
 }
 
@@ -98,7 +135,11 @@ data class ClickTimingConfig(
     val repeatDurationValue: Long = 5L,
     val repeatDurationUnit: TimeUnitOption = TimeUnitOption.MIN,
     val antiBotRandomEnabled: Boolean = false,
-    val randomRadiusDp: Int = 24
+    val randomRadiusDp: Int = 24,
+    val intervalJitterPercent: Int = 0,
+    val durationJitterMs: Int = 0,
+    val breakEveryMinutes: Int = 0,
+    val breakDurationSec: Int = 10
 )
 
 @Serializable
@@ -112,7 +153,11 @@ data class TargetPoint(
     val durationValue: Long = 40L,
     val durationUnit: TimeUnitOption = TimeUnitOption.MS,
     val antiBotRandomEnabled: Boolean = false,
-    val randomRadiusDp: Int = 24
+    val randomRadiusDp: Int = 24,
+    val intervalJitterPercent: Int = 0,
+    val durationJitterMs: Int = 0,
+    val breakEveryMinutes: Int = 0,
+    val breakDurationSec: Int = 10
 )
 
 @Serializable
@@ -123,7 +168,23 @@ data class ClickPreset(
     val timing: ClickTimingConfig,
     val targets: List<TargetPoint>,
     val scenarioSteps: List<ScenarioStep> = emptyList(),
+    val boundPackageName: String? = null,
     val createdAtMs: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class PresetShareBundle(
+    val preset: ClickPreset,
+    val imagesBase64: Map<String, String> = emptyMap()
+)
+
+data class RecordedTouchEvent(
+    val startX: Float,
+    val startY: Float,
+    val endX: Float,
+    val endY: Float,
+    val durationMs: Long,
+    val delayAfterMs: Long
 )
 
 @Serializable
@@ -135,7 +196,12 @@ data class AppSettings(
     val targetSizeDp: Int = 46,
     val targetOpacityPercent: Int = 92,
     val showAntiBotZoneGuide: Boolean = true,
-    val isOverlayLocked: Boolean = false
+    val isOverlayLocked: Boolean = false,
+    val keepScreenOnWhileRunning: Boolean = false,
+    val maxRunMinutes: Int = 0,
+    val batteryStopPercent: Int = 0,
+    val volumeKeyControlEnabled: Boolean = false,
+    val autoSwitchPresetByApp: Boolean = false
 ) {
     fun resolvedColorStyle(): ThemeColorStyle = themeColorStyle
     fun resolvedNavBarStyle(): NavBarStyle = navBarStyle

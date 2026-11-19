@@ -351,6 +351,8 @@ private fun MainTabsHost(
                                 onUpdateScenarioStep = viewModel::updateScenarioStep,
                                 onDeleteScenarioStep = { id -> viewModel.removeScenarioStepById(id) },
                                 onMoveScenarioStep = viewModel::moveScenarioStep,
+                                onDuplicateScenarioStep = viewModel::duplicateScenarioStep,
+                                onToggleScenarioStepEnabled = viewModel::toggleScenarioStepEnabled,
                                 onResetScenarioSteps = viewModel::clearScenarioSteps,
                                 onSavePresetClick = { mode -> presetSaveMode = mode },
                                 onLaunchPreset = { preset ->
@@ -396,6 +398,7 @@ private fun MainTabsHost(
                                 onSaveCurrentScenario = { presetSaveMode = ClickMode.SCENARIO },
                                 onExportPreset = viewModel::exportSinglePresetJson,
                                 onImportPreset = viewModel::importSinglePresetJson,
+                                onUpdatePresetBoundPackage = viewModel::updatePresetBoundPackage,
                                 onNotify = notify
                             )
                             2 -> TouchTestScreen(
@@ -634,6 +637,11 @@ private fun SettingsScreenHost(
                 onUpdateTargetOpacity = viewModel::updateTargetOpacity,
                 onUpdateShowAntiBotZoneGuide = viewModel::updateShowAntiBotZoneGuide,
                 onUpdateOverlayLocked = viewModel::updateOverlayLocked,
+                onUpdateKeepScreenOn = viewModel::updateKeepScreenOn,
+                onUpdateMaxRunMinutes = viewModel::updateMaxRunMinutes,
+                onUpdateBatteryStopPercent = viewModel::updateBatteryStopPercent,
+                onUpdateVolumeKeyControl = viewModel::updateVolumeKeyControlEnabled,
+                onUpdateAutoSwitchPresetByApp = viewModel::updateAutoSwitchPresetByApp,
                 onExportJson = viewModel::exportBackupJson,
                 onImportJson = viewModel::importBackupJson,
                 onResetAllData = viewModel::resetAllData,

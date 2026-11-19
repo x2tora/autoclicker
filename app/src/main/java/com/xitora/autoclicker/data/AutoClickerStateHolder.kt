@@ -282,13 +282,19 @@ class AutoClickerStateHolder private constructor(context: Context) {
                 id = UUID.randomUUID().toString(),
                 order = order,
                 title = when (type) {
-                    ScenarioStepType.REPEAT_UNTIL_DETECT -> "반복 터치 · 감지 대기"
+                    ScenarioStepType.REPEAT_UNTIL_DETECT -> "반복 터치 · 이미지 감지"
                     ScenarioStepType.SINGLE_TAP -> "${order}번째 위치 클릭"
                     ScenarioStepType.SCROLL -> "정해진 위치 스크롤"
+                    ScenarioStepType.WAIT_FOR_IMAGE -> "이미지 대기"
+                    ScenarioStepType.TAP_DETECTED_IMAGE -> "감지된 이미지 클릭"
+                    ScenarioStepType.LONG_PRESS -> "길게 누르기"
+                    ScenarioStepType.DELAY_RANDOM -> "랜덤 시간 대기"
+                    ScenarioStepType.COLOR_MATCH -> "픽셀 색상 감지"
                 },
                 type = type,
                 xPx = defaultX,
                 yPx = defaultY,
+                tapDurationMs = if (type == ScenarioStepType.LONG_PRESS) 650L else 40L,
                 postDelayMs = if (type == ScenarioStepType.SCROLL) 600L else 450L
             )
             added = step
@@ -296,6 +302,51 @@ class AutoClickerStateHolder private constructor(context: Context) {
         }
         AutoClickAccessibilityService.instance?.syncFromState()
         return added!!
+    }
+
+    fun duplicateScenarioStep(stepId: String) {
+        commit { s ->
+            val idx = s.scenarioSteps.indexOfFirst { it.id == stepId }
+            if (idx < 0) return@commit s
+            val orig = s.scenarioSteps[idx]
+            val copy = orig.copy(
+                id = UUID.randomUUID().toString(),
+                title = "${orig.title} (복사)"
+            )
+            val list = s.scenarioSteps.toMutableList()
+            list.add(idx + 1, copy)
+            s.copy(scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(list))
+        }
+        AutoClickAccessibilityService.instance?.syncFromState()
+    }
+
+    fun toggleScenarioStepEnabled(stepId: String) {
+        commit { s ->
+            val updated = s.scenarioSteps.map {
+                if (it.id == stepId) it.copy(enabled = !it.enabled) else it
+            }
+            s.copy(scenarioSteps = updated)
+        }
+        AutoClickAccessibilityService.instance?.syncFromState()
+    }
+
+    fun appendRecordedScenarioSteps(steps: List<ScenarioStep>) {
+        if (steps.isEmpty()) return
+        commit { s ->
+            s.copy(scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(s.scenarioSteps + steps))
+        }
+        AutoClickAccessibilityService.instance?.syncFromState()
+    }
+
+    fun updatePresetBoundPackage(presetId: String, packageName: String?) {
+        val cleanPkg = packageName?.trim()?.takeIf { it.isNotEmpty() }
+        commit { s ->
+            s.copy(
+                presets = s.presets.map {
+                    if (it.id == presetId) it.copy(boundPackageName = cleanPkg) else it
+                }
+            )
+        }
     }
 
     fun updateScenarioStep(step: ScenarioStep) {

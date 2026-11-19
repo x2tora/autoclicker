@@ -1,14 +1,20 @@
 package com.xitora.autoclicker.domain
 
 import com.xitora.autoclicker.model.ClickTimingConfig
+import com.xitora.autoclicker.model.NormalizedRect
+import com.xitora.autoclicker.model.RecordedTouchEvent
 import com.xitora.autoclicker.model.RepeatMode
 import com.xitora.autoclicker.model.ScenarioStep
+import com.xitora.autoclicker.model.ScenarioStepType
 import com.xitora.autoclicker.model.ScrollDirection
 import com.xitora.autoclicker.model.TargetPoint
 import com.xitora.autoclicker.model.TimeUnitOption
 import java.util.Locale
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
@@ -70,6 +76,146 @@ object ClickEngineCalculator {
         val targetX = (xPx + r * cos(angle).toFloat()).coerceIn(1f, maxW)
         val targetY = (yPx + r * sin(angle).toFloat()).coerceIn(1f, maxH)
         return targetX to targetY
+    }
+
+    /**
+     * Applies symmetric percentage jitter around [baseMs], e.g. 20% turns 100ms into [80ms..120ms].
+     */
+    fun applyJitterMs(
+        baseMs: Long,
+        jitterPercent: Int,
+        minMs: Long = MIN_INTERVAL_MS,
+        random: Random = Random.Default
+    ): Long {
+        val safeBase = baseMs.coerceAtLeast(minMs)
+        val pct = jitterPercent.coerceIn(0, 50)
+        if (pct == 0) return safeBase
+        val delta = (safeBase * pct) / 100L
+        if (delta <= 0L) return safeBase
+        val low = (safeBase - delta).coerceAtLeast(minMs)
+        val high = (safeBase + delta).coerceAtLeast(low)
+        return if (low == high) low else random.nextLong(low, high + 1L)
+    }
+
+    /**
+     * Applies symmetric millisecond jitter around [baseMs] for touch hold duration.
+     */
+    fun applyDurationJitterMs(
+        baseMs: Long,
+        jitterMs: Int,
+        random: Random = Random.Default
+    ): Long {
+        val safeBase = baseMs.coerceIn(MIN_DURATION_MS, MAX_DURATION_MS)
+        val j = jitterMs.coerceIn(0, 500).toLong()
+        if (j == 0L) return safeBase
+        val low = (safeBase - j).coerceAtLeast(MIN_DURATION_MS)
+        val high = (safeBase + j).coerceAtMost(MAX_DURATION_MS)
+        return if (low >= high) low else random.nextLong(low, high + 1L)
+    }
+
+    /**
+     * Converts a [NormalizedRect] (0..1) into pixel [left, top, right, bottom] bounds with [marginRatio] padding.
+     */
+    fun computeRoiPixelRect(
+        roi: NormalizedRect,
+        width: Int,
+        height: Int,
+        marginRatio: Float = 0.12f
+    ): IntArray {
+        val safeW = width.coerceAtLeast(16)
+        val safeH = height.coerceAtLeast(16)
+        val lNorm = minOf(roi.left, roi.right).coerceIn(0f, 1f)
+        val tNorm = minOf(roi.top, roi.bottom).coerceIn(0f, 1f)
+        val rNorm = maxOf(roi.left, roi.right).coerceIn(0f, 1f)
+        val bNorm = maxOf(roi.top, roi.bottom).coerceIn(0f, 1f)
+        val padX = ((rNorm - lNorm) * marginRatio).coerceAtLeast(0.03f)
+        val padY = ((bNorm - tNorm) * marginRatio).coerceAtLeast(0.03f)
+        val left = ((lNorm - padX).coerceIn(0f, 1f) * safeW).toInt().coerceIn(0, safeW - 16)
+        val top = ((tNorm - padY).coerceIn(0f, 1f) * safeH).toInt().coerceIn(0, safeH - 16)
+        val right = ((rNorm + padX).coerceIn(0f, 1f) * safeW).toInt().coerceIn(left + 16, safeW)
+        val bottom = ((bNorm + padY).coerceIn(0f, 1f) * safeH).toInt().coerceIn(top + 16, safeH)
+        return intArrayOf(left, top, right, bottom)
+    }
+
+    /**
+     * Returns maximum RGB channel difference (0..255) between two ARGB ints.
+     */
+    fun colorChannelMaxDiff(c1: Int, c2: Int): Int {
+        val dr = abs(((c1 shr 16) and 0xFF) - ((c2 shr 16) and 0xFF))
+        val dg = abs(((c1 shr 8) and 0xFF) - ((c2 shr 8) and 0xFF))
+        val db = abs((c1 and 0xFF) - (c2 and 0xFF))
+        return max(dr, max(dg, db))
+    }
+
+    /**
+     * Resolves the next 0-based step index given a 1-based [jumpOrder], or [currentIndex] + 1 if null.
+     */
+    fun resolveNextStepIndex(currentIndex: Int, totalSteps: Int, jumpOrder: Int?): Int {
+        if (totalSteps <= 0) return 0
+        if (jumpOrder != null) {
+            val targetIdx = jumpOrder - 1
+            return if (targetIdx in 0 until totalSteps) targetIdx else totalSteps
+        }
+        return currentIndex + 1
+    }
+
+    /**
+     * Converts recorded touch gestures into a clean list of [ScenarioStep] items.
+     */
+    fun mergeRecordedTapsToSteps(
+        events: List<RecordedTouchEvent>,
+        startOrder: Int = 1,
+        swipeThresholdPx: Float = 36f
+    ): List<ScenarioStep> {
+        return events.mapIndexed { idx, ev ->
+            val order = startOrder + idx
+            val dx = ev.endX - ev.startX
+            val dy = ev.endY - ev.startY
+            val dist = hypot(dx, dy)
+            val postDelay = ev.delayAfterMs.coerceIn(50L, 60_000L)
+            when {
+                dist >= swipeThresholdPx -> {
+                    val dir = if (abs(dx) > abs(dy)) {
+                        if (dx < 0f) ScrollDirection.LEFT else ScrollDirection.RIGHT
+                    } else {
+                        if (dy < 0f) ScrollDirection.DOWN else ScrollDirection.UP
+                    }
+                    ScenarioStep(
+                        order = order,
+                        title = "녹화 스크롤 #$order",
+                        type = ScenarioStepType.SCROLL,
+                        xPx = (ev.startX + ev.endX) / 2f,
+                        yPx = (ev.startY + ev.endY) / 2f,
+                        scrollDirection = dir,
+                        scrollDistanceDp = (dist / 2.5f).toInt().coerceIn(80, 1200),
+                        scrollDurationMs = ev.durationMs.coerceIn(80L, 5000L),
+                        postDelayMs = postDelay
+                    )
+                }
+                ev.durationMs >= 420L -> {
+                    ScenarioStep(
+                        order = order,
+                        title = "녹화 롱프레스 #$order",
+                        type = ScenarioStepType.LONG_PRESS,
+                        xPx = ev.startX,
+                        yPx = ev.startY,
+                        tapDurationMs = ev.durationMs.coerceIn(300L, 60_000L),
+                        postDelayMs = postDelay
+                    )
+                }
+                else -> {
+                    ScenarioStep(
+                        order = order,
+                        title = "녹화 클릭 #$order",
+                        type = ScenarioStepType.SINGLE_TAP,
+                        xPx = ev.startX,
+                        yPx = ev.startY,
+                        tapDurationMs = ev.durationMs.coerceIn(20L, 1000L),
+                        postDelayMs = postDelay
+                    )
+                }
+            }
+        }
     }
 
     /**

@@ -1,9 +1,11 @@
 package com.xitora.autoclicker.data
 
 import android.content.Context
+import android.util.Base64
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.AutoClickerDataState
 import com.xitora.autoclicker.model.ClickPreset
+import com.xitora.autoclicker.model.PresetShareBundle
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -55,9 +57,65 @@ class AutoClickerRepository(context: Context) {
         }
     }
 
-    fun exportSinglePresetJson(preset: ClickPreset): String = encodeSinglePresetJson(preset)
+    fun exportSinglePresetJson(preset: ClickPreset): String {
+        val imagesMap = linkedMapOf<String, String>()
+        preset.scenarioSteps.forEach { step ->
+            val paths = listOfNotNull(step.targetImagePath) + step.extraImagePaths
+            paths.forEach { path ->
+                if (!imagesMap.containsKey(path)) {
+                    val file = File(path)
+                    if (file.exists() && file.length() in 1L..2_000_000L) {
+                        runCatching {
+                            imagesMap[path] = Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+                        }
+                    }
+                }
+            }
+        }
+        return if (imagesMap.isEmpty()) {
+            encodeSinglePresetJson(preset)
+        } else {
+            presetJsonCodec.encodeToString(
+                PresetShareBundle.serializer(),
+                PresetShareBundle(preset = preset, imagesBase64 = imagesMap)
+            )
+        }
+    }
 
-    fun importSinglePresetJson(rawJson: String): Result<ClickPreset> = parseSinglePresetJson(rawJson)
+    fun importSinglePresetJson(rawJson: String): Result<ClickPreset> {
+        return runCatching {
+            val trimmed = rawJson.trim()
+            val rootObj = presetJsonCodec.parseToJsonElement(trimmed).jsonObject
+            if (rootObj.containsKey("preset") && rootObj.containsKey("imagesBase64")) {
+                val bundle = presetJsonCodec.decodeFromJsonElement(PresetShareBundle.serializer(), rootObj)
+                val dir = File(appContext.filesDir, "scenario_templates").apply { mkdirs() }
+                val pathRemap = mutableMapOf<String, String>()
+                bundle.imagesBase64.forEach { (origPath, b64) ->
+                    runCatching {
+                        val bytes = Base64.decode(b64, Base64.DEFAULT)
+                        val outFile = File(dir, "tpl_imp_${UUID.randomUUID()}.png")
+                        outFile.writeBytes(bytes)
+                        pathRemap[origPath] = outFile.absolutePath
+                    }
+                }
+                val remappedSteps = bundle.preset.scenarioSteps.map { step ->
+                    step.copy(
+                        targetImagePath = step.targetImagePath?.let { pathRemap[it] ?: it },
+                        extraImagePaths = step.extraImagePaths.map { pathRemap[it] ?: it }
+                    )
+                }
+                bundle.preset.copy(
+                    id = UUID.randomUUID().toString(),
+                    name = bundle.preset.name.trim().ifBlank { "가져온 프리셋" },
+                    targets = ClickEngineCalculator.reindexTargets(bundle.preset.targets),
+                    scenarioSteps = ClickEngineCalculator.reindexScenarioSteps(remappedSteps),
+                    createdAtMs = System.currentTimeMillis()
+                )
+            } else {
+                parseSinglePresetJson(trimmed).getOrThrow()
+            }
+        }
+    }
 
     companion object {
         private val presetJsonCodec = Json {

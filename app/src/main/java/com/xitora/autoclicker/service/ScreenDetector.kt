@@ -11,7 +11,10 @@ import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.xitora.autoclicker.domain.ClickEngineCalculator
+import com.xitora.autoclicker.model.MultiImageLogic
+import com.xitora.autoclicker.model.NormalizedRect
 import com.xitora.autoclicker.model.ScenarioStep
+import com.xitora.autoclicker.model.ScenarioStepType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -50,7 +53,10 @@ object ScreenDetector {
     private var cachedTemplateSet: CachedTemplateSet? = null
 
     fun hasValidDetectionTarget(step: ScenarioStep): Boolean {
-        return !step.targetImagePath.isNullOrBlank()
+        return when (step.type) {
+            ScenarioStepType.COLOR_MATCH -> step.targetColorHex != null
+            else -> !step.targetImagePath.isNullOrBlank() || step.extraImagePaths.any { it.isNotBlank() }
+        }
     }
 
     /**
@@ -120,16 +126,25 @@ object ScreenDetector {
 
     data class ImageMatchResult(
         val matched: Boolean,
-        val bestScore: Int
+        val bestScore: Int,
+        val matchedRect: Rect? = null
+    )
+
+    private data class MatchPlacement(
+        val score: Int,
+        val x: Int,
+        val y: Int
     )
 
     /**
      * Returns [ImageMatchResult] when a screenshot was captured and compared, or null if screenshot capture failed.
+     * When [roiNorm] is provided, crops the screenshot to that normalized region (+12% margin) before matching.
      */
     suspend fun detectImageWithScoreInService(
         service: AccessibilityService,
         imagePath: String?,
-        similarityPercent: Int
+        similarityPercent: Int,
+        roiNorm: NormalizedRect? = null
     ): ImageMatchResult? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || imagePath.isNullOrBlank()) {
             return ImageMatchResult(matched = false, bestScore = 0)
@@ -140,21 +155,37 @@ object ScreenDetector {
         val threshold = similarityPercent.coerceIn(50, 99)
         val screenBmp = captureSoftwareScreenBitmap(service) ?: return null
         return withContext(Dispatchers.Default) {
+            var searchBmp: Bitmap = screenBmp
             try {
-                val sw = (screenBmp.width * MATCH_SCALE).roundToInt().coerceAtLeast(16)
-                val sh = (screenBmp.height * MATCH_SCALE).roundToInt().coerceAtLeast(16)
-                val scaledScreen = Bitmap.createScaledBitmap(screenBmp, sw, sh, true)
+                var originX = 0
+                var originY = 0
+                if (roiNorm != null) {
+                    val roiPx = ClickEngineCalculator.computeRoiPixelRect(roiNorm, screenBmp.width, screenBmp.height)
+                    val roiW = (roiPx[2] - roiPx[0]).coerceAtLeast(16)
+                    val roiH = (roiPx[3] - roiPx[1]).coerceAtLeast(16)
+                    if (roiW < screenBmp.width || roiH < screenBmp.height) {
+                        originX = roiPx[0]
+                        originY = roiPx[1]
+                        searchBmp = Bitmap.createBitmap(screenBmp, roiPx[0], roiPx[1], roiW, roiH)
+                    }
+                }
+
+                val sw = (searchBmp.width * MATCH_SCALE).roundToInt().coerceAtLeast(16)
+                val sh = (searchBmp.height * MATCH_SCALE).roundToInt().coerceAtLeast(16)
+                val scaledScreen = Bitmap.createScaledBitmap(searchBmp, sw, sh, true)
                 val screenPixels = IntArray(sw * sh)
                 scaledScreen.getPixels(screenPixels, 0, sw, 0, 0, sw, sh)
-                if (scaledScreen !== screenBmp) scaledScreen.recycle()
+                if (scaledScreen !== searchBmp) scaledScreen.recycle()
 
                 val variants = loadScaledTemplateVariants(file, sw, sh)
                 if (variants.isEmpty()) return@withContext ImageMatchResult(matched = false, bestScore = 0)
 
                 var bestScore = 0
+                var bestPlacement: MatchPlacement? = null
+                var bestTpl: TemplatePatch? = null
                 for (tpl in variants) {
                     val adaptiveStride = if (min(tpl.width, tpl.height) >= 28) 2 else 1
-                    val score = computeTemplateMatchScore(
+                    val placement = computeTemplateMatchWithLocation(
                         screenPixels = screenPixels,
                         screenW = sw,
                         screenH = sh,
@@ -163,15 +194,187 @@ object ScreenDetector {
                         tplH = tpl.height,
                         stride = adaptiveStride
                     )
-                    if (score > bestScore) {
-                        bestScore = score
+                    if (placement.score > bestScore) {
+                        bestScore = placement.score
+                        bestPlacement = placement
+                        bestTpl = tpl
                     }
                     if (bestScore >= threshold) break
                 }
-                ImageMatchResult(matched = bestScore >= threshold, bestScore = bestScore)
+
+                val matchedRect = if (bestPlacement != null && bestTpl != null && bestScore > 0) {
+                    val invScale = 1f / MATCH_SCALE
+                    val left = originX + (bestPlacement.x * invScale).roundToInt()
+                    val top = originY + (bestPlacement.y * invScale).roundToInt()
+                    val right = left + (bestTpl.width * invScale).roundToInt()
+                    val bottom = top + (bestTpl.height * invScale).roundToInt()
+                    Rect(left, top, right, bottom)
+                } else {
+                    null
+                }
+                ImageMatchResult(
+                    matched = bestScore >= threshold,
+                    bestScore = bestScore,
+                    matchedRect = matchedRect
+                )
             } finally {
+                if (searchBmp !== screenBmp) searchBmp.recycle()
                 screenBmp.recycle()
             }
+        }
+    }
+
+    /**
+     * Evaluates one or more template images on a single screenshot using [matchLogic] (ANY or ALL).
+     */
+    suspend fun detectMultiImageInService(
+        service: AccessibilityService,
+        primaryPath: String?,
+        extraPaths: List<String>,
+        matchLogic: MultiImageLogic,
+        similarityPercent: Int,
+        roiNorm: NormalizedRect? = null
+    ): ImageMatchResult? {
+        val paths = (listOfNotNull(primaryPath?.takeIf { it.isNotBlank() }) + extraPaths.filter { it.isNotBlank() }).distinct()
+        if (paths.isEmpty()) return ImageMatchResult(matched = false, bestScore = 0)
+        if (paths.size == 1) {
+            return detectImageWithScoreInService(service, paths.first(), similarityPercent, roiNorm)
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return ImageMatchResult(matched = false, bestScore = 0)
+        }
+        val threshold = similarityPercent.coerceIn(50, 99)
+        val screenBmp = captureSoftwareScreenBitmap(service) ?: return null
+        return withContext(Dispatchers.Default) {
+            var searchBmp: Bitmap = screenBmp
+            try {
+                var originX = 0
+                var originY = 0
+                if (roiNorm != null) {
+                    val roiPx = ClickEngineCalculator.computeRoiPixelRect(roiNorm, screenBmp.width, screenBmp.height)
+                    val roiW = (roiPx[2] - roiPx[0]).coerceAtLeast(16)
+                    val roiH = (roiPx[3] - roiPx[1]).coerceAtLeast(16)
+                    if (roiW < screenBmp.width || roiH < screenBmp.height) {
+                        originX = roiPx[0]
+                        originY = roiPx[1]
+                        searchBmp = Bitmap.createBitmap(screenBmp, roiPx[0], roiPx[1], roiW, roiH)
+                    }
+                }
+                val sw = (searchBmp.width * MATCH_SCALE).roundToInt().coerceAtLeast(16)
+                val sh = (searchBmp.height * MATCH_SCALE).roundToInt().coerceAtLeast(16)
+                val scaledScreen = Bitmap.createScaledBitmap(searchBmp, sw, sh, true)
+                val screenPixels = IntArray(sw * sh)
+                scaledScreen.getPixels(screenPixels, 0, sw, 0, 0, sw, sh)
+                if (scaledScreen !== searchBmp) scaledScreen.recycle()
+
+                var bestScoreOverall = 0
+                var minScoreOverall = 100
+                var matchedCount = 0
+                var firstMatchedRect: Rect? = null
+
+                for (path in paths) {
+                    val file = File(path)
+                    if (!file.exists()) {
+                        minScoreOverall = 0
+                        continue
+                    }
+                    val variants = loadScaledTemplateVariants(file, sw, sh)
+                    var bestForPath = 0
+                    var bestPlacement: MatchPlacement? = null
+                    var bestTpl: TemplatePatch? = null
+                    for (tpl in variants) {
+                        val adaptiveStride = if (min(tpl.width, tpl.height) >= 28) 2 else 1
+                        val placement = computeTemplateMatchWithLocation(
+                            screenPixels, sw, sh, tpl.pixels, tpl.width, tpl.height, adaptiveStride
+                        )
+                        if (placement.score > bestForPath) {
+                            bestForPath = placement.score
+                            bestPlacement = placement
+                            bestTpl = tpl
+                        }
+                        if (bestForPath >= threshold) break
+                    }
+                    if (bestForPath > bestScoreOverall) bestScoreOverall = bestForPath
+                    if (bestForPath < minScoreOverall) minScoreOverall = bestForPath
+                    if (bestForPath >= threshold) {
+                        matchedCount++
+                        if (firstMatchedRect == null && bestPlacement != null && bestTpl != null) {
+                            val inv = 1f / MATCH_SCALE
+                            val left = originX + (bestPlacement.x * inv).roundToInt()
+                            val top = originY + (bestPlacement.y * inv).roundToInt()
+                            firstMatchedRect = Rect(
+                                left,
+                                top,
+                                left + (bestTpl.width * inv).roundToInt(),
+                                top + (bestTpl.height * inv).roundToInt()
+                            )
+                        }
+                        if (matchLogic == MultiImageLogic.ANY) break
+                    } else if (matchLogic == MultiImageLogic.ALL) {
+                        break
+                    }
+                }
+
+                val isMatched = when (matchLogic) {
+                    MultiImageLogic.ANY -> matchedCount >= 1
+                    MultiImageLogic.ALL -> matchedCount == paths.size
+                }
+                ImageMatchResult(
+                    matched = isMatched,
+                    bestScore = if (matchLogic == MultiImageLogic.ANY) bestScoreOverall else minScoreOverall,
+                    matchedRect = firstMatchedRect
+                )
+            } finally {
+                if (searchBmp !== screenBmp) searchBmp.recycle()
+                screenBmp.recycle()
+            }
+        }
+    }
+
+    /**
+     * Lightweight single-pixel color probe at ([xPx], [yPx]) against [targetColorHex] within [tolerance] (0..100).
+     */
+    suspend fun detectPixelColorInService(
+        service: AccessibilityService,
+        xPx: Float,
+        yPx: Float,
+        targetColorHex: Long?,
+        tolerance: Int
+    ): ImageMatchResult? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || targetColorHex == null) {
+            return ImageMatchResult(matched = false, bestScore = 0)
+        }
+        val screenBmp = captureSoftwareScreenBitmap(service) ?: return null
+        return try {
+            val sx = xPx.roundToInt().coerceIn(0, screenBmp.width - 1)
+            val sy = yPx.roundToInt().coerceIn(0, screenBmp.height - 1)
+            val pixel = screenBmp.getPixel(sx, sy)
+            val maxDiff = ClickEngineCalculator.colorChannelMaxDiff(pixel, targetColorHex.toInt())
+            val score = (100 - (maxDiff * 100) / 255).coerceIn(0, 100)
+            val tol = tolerance.coerceIn(2, 100)
+            ImageMatchResult(
+                matched = maxDiff <= tol,
+                bestScore = score,
+                matchedRect = Rect(sx - 18, sy - 18, sx + 18, sy + 18)
+            )
+        } finally {
+            screenBmp.recycle()
+        }
+    }
+
+    suspend fun samplePixelColorInService(
+        service: AccessibilityService,
+        xPx: Float,
+        yPx: Float
+    ): Long? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        val screenBmp = captureSoftwareScreenBitmap(service) ?: return null
+        return try {
+            val sx = xPx.roundToInt().coerceIn(0, screenBmp.width - 1)
+            val sy = yPx.roundToInt().coerceIn(0, screenBmp.height - 1)
+            screenBmp.getPixel(sx, sy).toLong() and 0xFFFFFFFFL
+        } finally {
+            screenBmp.recycle()
         }
     }
 
@@ -264,10 +467,28 @@ object ScreenDetector {
         tplW: Int,
         tplH: Int,
         stride: Int = 1
-    ): Int {
-        if (screenW <= 0 || screenH <= 0 || tplW <= 0 || tplH <= 0) return 0
-        if (tplW > screenW || tplH > screenH) return 0
-        if (screenPixels.size < screenW * screenH || tplPixels.size < tplW * tplH) return 0
+    ): Int = computeTemplateMatchWithLocation(
+        screenPixels = screenPixels,
+        screenW = screenW,
+        screenH = screenH,
+        tplPixels = tplPixels,
+        tplW = tplW,
+        tplH = tplH,
+        stride = stride
+    ).score
+
+    private fun computeTemplateMatchWithLocation(
+        screenPixels: IntArray,
+        screenW: Int,
+        screenH: Int,
+        tplPixels: IntArray,
+        tplW: Int,
+        tplH: Int,
+        stride: Int = 1
+    ): MatchPlacement {
+        if (screenW <= 0 || screenH <= 0 || tplW <= 0 || tplH <= 0) return MatchPlacement(0, 0, 0)
+        if (tplW > screenW || tplH > screenH) return MatchPlacement(0, 0, 0)
+        if (screenPixels.size < screenW * screenH || tplPixels.size < tplW * tplH) return MatchPlacement(0, 0, 0)
 
         val sampleStep = max(1, min(tplW, tplH) / 14)
         val coarseXList = mutableListOf<Int>()
@@ -287,7 +508,7 @@ object ScreenDetector {
             }
             ty += sampleStep
         }
-        if (coarseColors.isEmpty()) return 0
+        if (coarseColors.isEmpty()) return MatchPlacement(0, 0, 0)
 
         val sampleCount = coarseColors.size
         val sampleX = coarseXList.toIntArray()
@@ -413,9 +634,11 @@ object ScreenDetector {
         val fineY = fineYList.toIntArray()
         val fineRgb = fineColors.toIntArray()
         val maxPossibleDiff = fineCount.toLong() * 3L * 255L
-        if (maxPossibleDiff <= 0L) return 0
+        if (maxPossibleDiff <= 0L) return MatchPlacement(0, 0, 0)
 
         var bestOverallScore = 0
+        var bestOverallX = 0
+        var bestOverallY = 0
         for (k in 0 until topK) {
             if (topDiff[k] == Long.MAX_VALUE) continue
             var bestFineX = topX[k]
@@ -482,8 +705,10 @@ object ScreenDetector {
             }
             if (candidateScore > bestOverallScore) {
                 bestOverallScore = candidateScore
+                bestOverallX = bestFineX
+                bestOverallY = bestFineY
             }
         }
-        return bestOverallScore
+        return MatchPlacement(bestOverallScore, bestOverallX, bestOverallY)
     }
 }

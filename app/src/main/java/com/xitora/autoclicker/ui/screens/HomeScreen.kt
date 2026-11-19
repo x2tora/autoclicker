@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,6 +72,8 @@ fun HomeScreen(
     onUpdateScenarioStep: (ScenarioStep) -> Unit,
     onDeleteScenarioStep: (String) -> Unit,
     onMoveScenarioStep: (String, Boolean) -> Unit,
+    onDuplicateScenarioStep: (String) -> Unit,
+    onToggleScenarioStepEnabled: (String) -> Unit,
     onResetScenarioSteps: () -> Unit,
     onSavePresetClick: (ClickMode) -> Unit,
     onLaunchPreset: (ClickPreset) -> Unit,
@@ -437,37 +440,27 @@ fun HomeScreen(
                                         )
                                     }
 
+                                    val primaryCol = MiuixTheme.colorScheme.primary
+                                    val addOptions = listOf(
+                                        Triple(ScenarioStepType.REPEAT_UNTIL_DETECT, "+ 반복·감지", Color(0xFF7C5CFF)),
+                                        Triple(ScenarioStepType.WAIT_FOR_IMAGE, "+ 이미지 대기", Color(0xFF10B981)),
+                                        Triple(ScenarioStepType.TAP_DETECTED_IMAGE, "+ 감지 위치 클릭", Color(0xFFF59E0B)),
+                                        Triple(ScenarioStepType.SINGLE_TAP, "+ 1회 클릭", primaryCol),
+                                        Triple(ScenarioStepType.LONG_PRESS, "+ 롱프레스", Color(0xFFEC4899)),
+                                        Triple(ScenarioStepType.SCROLL, "+ 스크롤", Color(0xFF06B6D4)),
+                                        Triple(ScenarioStepType.DELAY_RANDOM, "+ 랜덤 대기", Color(0xFF6366F1)),
+                                        Triple(ScenarioStepType.COLOR_MATCH, "+ 색상 감지", Color(0xFF14B8A6))
+                                    )
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        item {
+                                        items(addOptions.size) { idx ->
+                                            val (type, label, col) = addOptions[idx]
                                             SquirclePillBadge(
-                                                text = "+ 반복·감지",
-                                                backgroundColor = Color(0xFF7C5CFF).copy(alpha = 0.14f),
-                                                contentColor = Color(0xFF7C5CFF),
+                                                text = label,
+                                                backgroundColor = col.copy(alpha = 0.14f),
+                                                contentColor = col,
                                                 onClick = {
-                                                    onAddScenarioStep(ScenarioStepType.REPEAT_UNTIL_DETECT)
-                                                    onNotify("반복·감지 단계를 추가했습니다.")
-                                                }
-                                            )
-                                        }
-                                        item {
-                                            SquirclePillBadge(
-                                                text = "+ 1회 클릭",
-                                                backgroundColor = MiuixTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                                contentColor = MiuixTheme.colorScheme.primary,
-                                                onClick = {
-                                                    onAddScenarioStep(ScenarioStepType.SINGLE_TAP)
-                                                    onNotify("1회 클릭 단계를 추가했습니다.")
-                                                }
-                                            )
-                                        }
-                                        item {
-                                            SquirclePillBadge(
-                                                text = "+ 스크롤",
-                                                backgroundColor = Color(0xFF06B6D4).copy(alpha = 0.14f),
-                                                contentColor = Color(0xFF06B6D4),
-                                                onClick = {
-                                                    onAddScenarioStep(ScenarioStepType.SCROLL)
-                                                    onNotify("스크롤 단계를 추가했습니다.")
+                                                    onAddScenarioStep(type)
+                                                    onNotify("${type.label} 단계를 추가했습니다.")
                                                 }
                                             )
                                         }
@@ -508,9 +501,14 @@ fun HomeScreen(
                                     onUpdateScenarioStep(step.copy(scrollDirection = newDir))
                                     onNotify("단계 #${step.order} 스크롤 방향이 저장되었습니다.")
                                 },
-                                onMoveUp = { onMoveScenarioStep(step.id, true) },
-                                onMoveDown = { onMoveScenarioStep(step.id, false) },
-                                onDelete = {
+                                    onMoveUp = { onMoveScenarioStep(step.id, true) },
+                                    onMoveDown = { onMoveScenarioStep(step.id, false) },
+                                    onDuplicate = {
+                                        onDuplicateScenarioStep(step.id)
+                                        onNotify("단계 #${step.order}을 복제했습니다.")
+                                    },
+                                    onToggleEnabled = { onToggleScenarioStepEnabled(step.id) },
+                                    onDelete = {
                                     onDeleteScenarioStep(step.id)
                                     onNotify("단계 #${step.order}을 삭제했습니다.")
                                 },
@@ -1174,6 +1172,8 @@ private fun ScenarioStepRowCard(
     onQuickChangeScrollDirection: (ScrollDirection) -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onDuplicate: () -> Unit,
+    onToggleEnabled: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1181,25 +1181,48 @@ private fun ScenarioStepRowCard(
         ScenarioStepType.REPEAT_UNTIL_DETECT -> Color(0xFF7C5CFF)
         ScenarioStepType.SINGLE_TAP -> MiuixTheme.colorScheme.primary
         ScenarioStepType.SCROLL -> Color(0xFF06B6D4)
+        ScenarioStepType.WAIT_FOR_IMAGE -> Color(0xFF10B981)
+        ScenarioStepType.TAP_DETECTED_IMAGE -> Color(0xFFF59E0B)
+        ScenarioStepType.LONG_PRESS -> Color(0xFFEC4899)
+        ScenarioStepType.DELAY_RANDOM -> Color(0xFF6366F1)
+        ScenarioStepType.COLOR_MATCH -> Color(0xFF14B8A6)
     }
+    val jumpNote = buildList {
+        step.onMatchJumpOrder?.let { add("감지→#$it") }
+        step.onTimeoutJumpOrder?.let { add("시간초과→#$it") }
+    }.joinToString(" · ")
     val detailText = when (step.type) {
         ScenarioStepType.REPEAT_UNTIL_DETECT -> {
             val condLabel = if (!step.targetImagePath.isNullOrBlank()) {
-                "이미지 ${step.imageSimilarityPercent}%"
+                val inv = if (step.invertCondition) "없을 때 " else ""
+                "${inv}이미지 ${step.imageSimilarityPercent}%"
             } else {
                 "실행 시 화면에서 감지 영역 선택"
             }
             "${step.repeatIntervalMs}ms 반복 · $condLabel · 후대기 ${step.postDelayMs}ms"
         }
+        ScenarioStepType.WAIT_FOR_IMAGE -> {
+            val inv = if (step.invertCondition) "사라질 때까지 " else ""
+            "${inv}이미지 대기 ${step.imageSimilarityPercent}% · 후대기 ${step.postDelayMs}ms"
+        }
+        ScenarioStepType.TAP_DETECTED_IMAGE ->
+            "감지된 이미지 중앙 클릭 (${step.imageSimilarityPercent}%) · 후대기 ${step.postDelayMs}ms"
+        ScenarioStepType.COLOR_MATCH ->
+            "픽셀 색상 대기 (${step.xPx.roundToInt()}, ${step.yPx.roundToInt()}) · 오차 ${step.colorTolerance}"
+        ScenarioStepType.DELAY_RANDOM ->
+            "랜덤 대기 ${step.delayMinMs}~${step.delayMaxMs}ms"
+        ScenarioStepType.LONG_PRESS ->
+            "길게 누르기 ${step.tapDurationMs}ms (${step.xPx.roundToInt()}, ${step.yPx.roundToInt()})"
         ScenarioStepType.SINGLE_TAP ->
             "1회 클릭 (${step.xPx.roundToInt()}, ${step.yPx.roundToInt()}) · 후대기 ${step.postDelayMs}ms"
         ScenarioStepType.SCROLL ->
             "${step.scrollDirection.arrowSymbol} ${step.scrollDistanceDp}dp 스크롤 (${step.xPx.roundToInt()}, ${step.yPx.roundToInt()}) · 후대기 ${step.postDelayMs}ms"
-    }
+    }.let { base -> if (jumpNote.isNotEmpty()) "$base · $jumpNote" else base }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .then(if (step.enabled) Modifier else Modifier.alpha(0.55f))
             .squircleClip(16.dp)
             .clickable(onClick = onEdit),
         cornerRadius = 16.dp,
@@ -1287,6 +1310,23 @@ private fun ScenarioStepRowCard(
                         )
                     }
                 }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                SquirclePillBadge(
+                    text = if (step.enabled) "활성" else "비활성",
+                    backgroundColor = if (step.enabled) Color(0xFF10B981).copy(alpha = 0.14f) else MiuixTheme.colorScheme.secondaryContainer,
+                    contentColor = if (step.enabled) Color(0xFF10B981) else MiuixTheme.colorScheme.onSecondaryContainer,
+                    onClick = onToggleEnabled
+                )
+                SquirclePillBadge(
+                    text = "복제",
+                    backgroundColor = MiuixTheme.colorScheme.secondaryContainer,
+                    contentColor = MiuixTheme.colorScheme.onSecondaryContainer,
+                    onClick = onDuplicate
+                )
             }
 
             if (step.type == ScenarioStepType.SCROLL) {

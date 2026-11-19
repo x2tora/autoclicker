@@ -358,4 +358,49 @@ class ClickEngineCalculatorTest {
         val invalidResult = AutoClickerRepository.parseSinglePresetJson("""{"singleConfig":{},"presets":[]}""")
         assertTrue(invalidResult.isFailure)
     }
+
+    @Test
+    fun `interval jitter and roi pixel bounds stay within expected limits`() {
+        val rng = Random(42)
+        assertEquals(200L, ClickEngineCalculator.applyJitterMs(200L, 0, random = rng))
+        repeat(50) {
+            val v = ClickEngineCalculator.applyJitterMs(200L, 25, random = rng)
+            assertTrue("Jittered interval $v out of [150, 250]", v in 150L..250L)
+            val d = ClickEngineCalculator.applyDurationJitterMs(40L, 15, random = rng)
+            assertTrue("Jittered duration $d out of [25, 55]", d in 25L..55L)
+        }
+
+        val roi = NormalizedRect(left = 0.1f, top = 0.2f, right = 0.3f, bottom = 0.4f)
+        val px = ClickEngineCalculator.computeRoiPixelRect(roi, width = 1000, height = 2000, marginRatio = 0.12f)
+        assertEquals(4, px.size)
+        assertTrue(px[0] in 0 until 100)
+        assertTrue(px[2] in 301..1000)
+        assertTrue(px[1] in 0 until 400)
+        assertTrue(px[3] in 801..2000)
+    }
+
+    @Test
+    fun `phase 2 and 3 branching, color distance, and touch recorder conversion behave accurately`() {
+        // Color distance
+        assertEquals(0, ClickEngineCalculator.colorChannelMaxDiff(0xFF3482FF.toInt(), 0xFF3482FF.toInt()))
+        assertEquals(10, ClickEngineCalculator.colorChannelMaxDiff(0xFF3482FF.toInt(), 0xFF3E82FF.toInt()))
+
+        // Branching jump resolution
+        assertEquals(1, ClickEngineCalculator.resolveNextStepIndex(currentIndex = 0, totalSteps = 5, jumpOrder = null))
+        assertEquals(3, ClickEngineCalculator.resolveNextStepIndex(currentIndex = 0, totalSteps = 5, jumpOrder = 4))
+        assertEquals(5, ClickEngineCalculator.resolveNextStepIndex(currentIndex = 0, totalSteps = 5, jumpOrder = 99))
+
+        // Recorded touch events -> ScenarioStep conversion
+        val recorded = listOf(
+            RecordedTouchEvent(startX = 100f, startY = 200f, endX = 105f, endY = 203f, durationMs = 60L, delayAfterMs = 300L),
+            RecordedTouchEvent(startX = 300f, startY = 400f, endX = 302f, endY = 401f, durationMs = 650L, delayAfterMs = 500L),
+            RecordedTouchEvent(startX = 500f, startY = 1200f, endX = 500f, endY = 700f, durationMs = 320L, delayAfterMs = 450L)
+        )
+        val steps = ClickEngineCalculator.mergeRecordedTapsToSteps(recorded, startOrder = 1)
+        assertEquals(3, steps.size)
+        assertEquals(ScenarioStepType.SINGLE_TAP, steps[0].type)
+        assertEquals(ScenarioStepType.LONG_PRESS, steps[1].type)
+        assertEquals(ScenarioStepType.SCROLL, steps[2].type)
+        assertEquals(ScrollDirection.DOWN, steps[2].scrollDirection)
+    }
 }

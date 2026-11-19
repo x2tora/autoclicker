@@ -111,6 +111,9 @@ class OverlayController(
                 val cur = stateHolder.state.value.settings.isOverlayLocked
                 stateHolder.updateSettings { it.copy(isOverlayLocked = !cur) }
             },
+            onRecordClick = {
+                openTouchRecorder()
+            },
             onAddTargetClick = {
                 val (sw, sh) = screenDimensions()
                 val mode = stateHolder.runtime.value.activeMode
@@ -332,6 +335,7 @@ class OverlayController(
             ClickMode.MULTI -> data.multiConfig
             ClickMode.SCENARIO -> data.scenarioConfig
         }
+        controlPanelView?.keepScreenOn = rt.isClicking && data.settings.keepScreenOnWhileRunning
         controlPanelView?.updateState(
             mode = rt.activeMode,
             isRunning = rt.isClicking,
@@ -407,6 +411,11 @@ class OverlayController(
                         resumeAfterSave = false
                     )
                 },
+                onTestDetection = { draftStep ->
+                    stateHolder.updateScenarioStep(draftStep)
+                    dismissModal()
+                    AutoClickAccessibilityService.instance?.testScenarioStepDetection(draftStep)
+                },
                 onDelete = {
                     stateHolder.removeScenarioStepById(step.id)
                     dismissModal()
@@ -471,7 +480,7 @@ class OverlayController(
     fun openDetectionTargetPicker(
         step: ScenarioStep,
         resumeAfterSave: Boolean,
-        onSaveCropRect: (Rect) -> Unit
+        onSaveCropRect: (Rect, Boolean) -> Unit
     ) {
         dismissModal()
         val pickerView = OverlayModalFactory.buildScreenDetectionPickerOverlay(
@@ -479,13 +488,45 @@ class OverlayController(
             step = step,
             isDark = isEffectiveDark(),
             resumeAfterSave = resumeAfterSave,
-            onSaveCropRect = { rect ->
+            onSaveCropRect = { rect, useRoi ->
                 dismissModal()
-                onSaveCropRect(rect)
+                onSaveCropRect(rect, useRoi)
             },
             onCancel = { dismissModal() }
         )
         showModalView(pickerView)
+    }
+
+    fun showImageMatchTestOverlay(
+        step: ScenarioStep,
+        result: ScreenDetector.ImageMatchResult?
+    ) {
+        dismissModal()
+        val overlay = OverlayModalFactory.buildImageMatchTestOverlay(
+            context = serviceContext,
+            step = step,
+            result = result,
+            isDark = isEffectiveDark(),
+            onDismiss = { dismissModal() }
+        )
+        showModalView(overlay)
+    }
+
+    fun openTouchRecorder() {
+        onPauseBeforeEdit()
+        dismissModal()
+        val recorder = OverlayModalFactory.buildTouchRecorderOverlay(
+            context = serviceContext,
+            isDark = isEffectiveDark(),
+            onFinish = { recorded ->
+                dismissModal()
+                val startOrder = stateHolder.state.value.scenarioSteps.size + 1
+                val steps = ClickEngineCalculator.mergeRecordedTapsToSteps(recorded, startOrder = startOrder)
+                stateHolder.appendRecordedScenarioSteps(steps)
+            },
+            onCancel = { dismissModal() }
+        )
+        showModalView(recorder)
     }
 
     private fun showModalView(view: View) {

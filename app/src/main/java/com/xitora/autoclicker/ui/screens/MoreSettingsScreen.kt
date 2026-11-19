@@ -56,6 +56,11 @@ fun MoreSettingsScreen(
     onUpdateTargetOpacity: (Int) -> Unit,
     onUpdateShowAntiBotZoneGuide: (Boolean) -> Unit,
     onUpdateOverlayLocked: (Boolean) -> Unit,
+    onUpdateKeepScreenOn: (Boolean) -> Unit,
+    onUpdateMaxRunMinutes: (Int) -> Unit,
+    onUpdateBatteryStopPercent: (Int) -> Unit,
+    onUpdateVolumeKeyControl: (Boolean) -> Unit,
+    onUpdateAutoSwitchPresetByApp: (Boolean) -> Unit,
     onExportJson: () -> String,
     onImportJson: (String) -> Result<Unit>,
     onResetAllData: () -> Unit,
@@ -283,6 +288,92 @@ fun MoreSettingsScreen(
                             icon = MiuixIcons.Lock,
                             contentDescription = null,
                             accentColor = Color(0xFFF59E0B),
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                SwitchPreference(
+                    title = "실행 중 화면 켜짐 유지",
+                    summary = "자동 터치 실행 동안 화면이 자동으로 꺼지지 않도록 유지",
+                    checked = state.settings.keepScreenOnWhileRunning,
+                    onCheckedChange = onUpdateKeepScreenOn,
+                    insideMargin = preferenceMargin,
+                    startAction = {
+                        MiuixGlassIcon(
+                            icon = MiuixIcons.Play,
+                            contentDescription = null,
+                            accentColor = Color(0xFF10B981),
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                val maxRunOptions = listOf(0 to "제한 없음", 30 to "30분", 60 to "1시간", 120 to "2시간", 240 to "4시간")
+                OverlayDropdownPreference(
+                    title = "최대 연속 실행 안전 정지",
+                    summary = maxRunOptions.firstOrNull { it.first == state.settings.maxRunMinutes }?.second
+                        ?: "${state.settings.maxRunMinutes}분",
+                    items = maxRunOptions.map { it.second },
+                    selectedIndex = maxRunOptions.indexOfFirst { it.first == state.settings.maxRunMinutes }.coerceAtLeast(0),
+                    onSelectedIndexChange = { idx -> onUpdateMaxRunMinutes(maxRunOptions[idx].first) },
+                    insideMargin = preferenceMargin,
+                    startAction = {
+                        MiuixGlassIcon(
+                            icon = MiuixIcons.Stopwatch,
+                            contentDescription = null,
+                            accentColor = Color(0xFF7C5CFF),
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                val batteryOptions = listOf(0 to "사용 안 함", 10 to "10% 이하", 15 to "15% 이하", 20 to "20% 이하", 30 to "30% 이하")
+                OverlayDropdownPreference(
+                    title = "배터리 부족 시 자동 정지",
+                    summary = batteryOptions.firstOrNull { it.first == state.settings.batteryStopPercent }?.second
+                        ?: "${state.settings.batteryStopPercent}% 이하",
+                    items = batteryOptions.map { it.second },
+                    selectedIndex = batteryOptions.indexOfFirst { it.first == state.settings.batteryStopPercent }.coerceAtLeast(0),
+                    onSelectedIndexChange = { idx -> onUpdateBatteryStopPercent(batteryOptions[idx].first) },
+                    insideMargin = preferenceMargin,
+                    startAction = {
+                        MiuixGlassIcon(
+                            icon = MiuixIcons.Settings,
+                            contentDescription = null,
+                            accentColor = Color(0xFFF59E0B),
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                SwitchPreference(
+                    title = "볼륨키 단축 제어",
+                    summary = "오버레이 표시 중 볼륨- 2연타: 시작/일시정지 · 볼륨+ 2연타: 잠금",
+                    checked = state.settings.volumeKeyControlEnabled,
+                    onCheckedChange = onUpdateVolumeKeyControl,
+                    insideMargin = preferenceMargin,
+                    startAction = {
+                        MiuixGlassIcon(
+                            icon = MiuixIcons.Tune,
+                            contentDescription = null,
+                            accentColor = Color(0xFF06B6D4),
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                SwitchPreference(
+                    title = "앱 실행 시 프리셋 자동 전환",
+                    summary = "프리셋에 연동한 앱이 열리면 자동으로 오버레이와 프리셋을 전환",
+                    checked = state.settings.autoSwitchPresetByApp,
+                    onCheckedChange = onUpdateAutoSwitchPresetByApp,
+                    insideMargin = preferenceMargin,
+                    startAction = {
+                        MiuixGlassIcon(
+                            icon = MiuixIcons.Favorites,
+                            contentDescription = null,
+                            accentColor = Color(0xFF7C5CFF),
                             modifier = Modifier.padding(end = 6.dp)
                         )
                     }

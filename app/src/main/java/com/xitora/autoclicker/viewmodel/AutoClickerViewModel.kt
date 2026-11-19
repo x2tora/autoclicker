@@ -123,6 +123,19 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun clearScenarioSteps() = stateHolder.clearScenarioSteps()
 
+    fun duplicateScenarioStep(stepId: String) = stateHolder.duplicateScenarioStep(stepId)
+
+    fun toggleScenarioStepEnabled(stepId: String) = stateHolder.toggleScenarioStepEnabled(stepId)
+
+    fun updatePresetBoundPackage(presetId: String, packageName: String?) =
+        stateHolder.updatePresetBoundPackage(presetId, packageName)
+
+    fun updateVolumeKeyControlEnabled(enabled: Boolean) =
+        stateHolder.updateSettings { it.copy(volumeKeyControlEnabled = enabled) }
+
+    fun updateAutoSwitchPresetByApp(enabled: Boolean) =
+        stateHolder.updateSettings { it.copy(autoSwitchPresetByApp = enabled) }
+
     fun savePreset(name: String, mode: ClickMode): ClickPreset = stateHolder.savePreset(name, mode)
 
     fun renamePreset(presetId: String, newName: String) = stateHolder.renamePreset(presetId, newName)
@@ -145,6 +158,15 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun updateOverlayLocked(locked: Boolean) =
         stateHolder.updateSettings { it.copy(isOverlayLocked = locked) }
+
+    fun updateKeepScreenOn(keepOn: Boolean) =
+        stateHolder.updateSettings { it.copy(keepScreenOnWhileRunning = keepOn) }
+
+    fun updateMaxRunMinutes(minutes: Int) =
+        stateHolder.updateSettings { it.copy(maxRunMinutes = minutes.coerceIn(0, 720)) }
+
+    fun updateBatteryStopPercent(percent: Int) =
+        stateHolder.updateSettings { it.copy(batteryStopPercent = percent.coerceIn(0, 50)) }
 
     fun updateCustomKeyColor(colorHex: Long?) =
         stateHolder.updateSettings {

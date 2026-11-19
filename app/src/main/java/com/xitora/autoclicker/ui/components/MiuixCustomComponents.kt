@@ -477,6 +477,61 @@ fun ClickTimingEditorSection(
                             valueRange = 8f..80f,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "클릭 간격 랜덤 지터",
+                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                            SquirclePillBadge(
+                                text = if (config.intervalJitterPercent == 0) "고정" else "±${config.intervalJitterPercent}%",
+                                backgroundColor = Color(0xFF06B6D4).copy(alpha = 0.15f),
+                                contentColor = Color(0xFF0891B2)
+                            )
+                        }
+                        Slider(
+                            value = config.intervalJitterPercent.toFloat(),
+                            onValueChange = { raw ->
+                                val stepped = ((raw / 5f).roundToInt() * 5).coerceIn(0, 40)
+                                onConfigChange(config.copy(intervalJitterPercent = stepped))
+                            },
+                            valueRange = 0f..40f,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "장시간 주기적 휴식 (10초)",
+                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(listOf(0 to "끄기", 10 to "10분마다", 30 to "30분마다", 60 to "60분마다")) { (mins, label) ->
+                                val selected = config.breakEveryMinutes == mins
+                                SquirclePillBadge(
+                                    text = label,
+                                    backgroundColor = if (selected) {
+                                        MiuixTheme.colorScheme.primary
+                                    } else {
+                                        MiuixTheme.colorScheme.surfaceContainerHigh
+                                    },
+                                    contentColor = if (selected) {
+                                        MiuixTheme.colorScheme.onPrimary
+                                    } else {
+                                        MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    },
+                                    onClick = { onConfigChange(config.copy(breakEveryMinutes = mins)) }
+                                )
+                            }
+                        }
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -922,7 +977,9 @@ fun ScenarioStepEditDialog(
                 }
 
                 when (editing.type) {
-                    ScenarioStepType.REPEAT_UNTIL_DETECT -> {
+                    ScenarioStepType.REPEAT_UNTIL_DETECT,
+                    ScenarioStepType.WAIT_FOR_IMAGE,
+                    ScenarioStepType.TAP_DETECTED_IMAGE -> {
                         HorizontalDivider()
                         Column(
                             modifier = Modifier
@@ -1000,16 +1057,37 @@ fun ScenarioStepEditDialog(
                                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                                     )
                                 }
+                                if (editing.detectRoiRectNorm != null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "탐색 범위: 지정 영역(ROI) 고속 모드",
+                                            style = MiuixTheme.textStyles.footnote2,
+                                            color = Color(0xFF10B981)
+                                        )
+                                        SquirclePillBadge(
+                                            text = "전체 화면으로",
+                                            backgroundColor = MiuixTheme.colorScheme.secondaryContainer,
+                                            contentColor = MiuixTheme.colorScheme.onSecondaryContainer,
+                                            onClick = { editing = editing.copy(detectRoiRectNorm = null) }
+                                        )
+                                    }
+                                }
                             }
 
-                        TimeUnitValueRow(
-                            title = "반복 클릭 간격",
-                            subtitle = "감지되기 전까지 반복 터치하는 주기 (ms)",
-                            value = editing.repeatIntervalMs,
-                            unit = TimeUnitOption.MS,
-                            quickPresets = listOf(60L, 120L, 250L, 500L),
-                            onChanged = { v, _ -> editing = editing.copy(repeatIntervalMs = v.coerceAtLeast(20L)) }
-                        )
+                        if (editing.type == ScenarioStepType.REPEAT_UNTIL_DETECT) {
+                            TimeUnitValueRow(
+                                title = "반복 클릭 간격",
+                                subtitle = "감지되기 전까지 반복 터치하는 주기 (ms)",
+                                value = editing.repeatIntervalMs,
+                                unit = TimeUnitOption.MS,
+                                quickPresets = listOf(60L, 120L, 250L, 500L),
+                                onChanged = { v, _ -> editing = editing.copy(repeatIntervalMs = v.coerceAtLeast(20L)) }
+                            )
+                        }
                         TimeUnitValueRow(
                             title = "화면 감지 확인 주기",
                             subtitle = "이미지 조건을 확인하는 간격 (ms)",
@@ -1018,15 +1096,129 @@ fun ScenarioStepEditDialog(
                             quickPresets = listOf(250L, 450L, 800L, 1200L),
                             onChanged = { v, _ -> editing = editing.copy(detectCheckIntervalMs = v.coerceAtLeast(200L)) }
                         )
+                        if (editing.type != ScenarioStepType.TAP_DETECTED_IMAGE) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("반전 조건 (없을 때 통과)", style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold))
+                                    Text(
+                                        if (editing.invertCondition) "이미지가 화면에서 사라졌을 때 다음 단계로 이동" else "이미지가 화면에 나타났을 때 다음 단계로 이동",
+                                        style = MiuixTheme.textStyles.footnote2,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    )
+                                }
+                                Switch(
+                                    checked = editing.invertCondition,
+                                    onCheckedChange = { editing = editing.copy(invertCondition = it) }
+                                )
+                            }
+                        }
+                        var timeoutText by remember(editing.id) { mutableStateOf(if (editing.detectTimeoutMs > 0L) editing.detectTimeoutMs.toString() else "") }
+                        var matchJumpText by remember(editing.id) { mutableStateOf(editing.onMatchJumpOrder?.toString() ?: "") }
+                        var timeoutJumpText by remember(editing.id) { mutableStateOf(editing.onTimeoutJumpOrder?.toString() ?: "") }
+                        TextField(
+                            value = timeoutText,
+                            onValueChange = { raw ->
+                                val digits = raw.filter(Char::isDigit).take(7)
+                                timeoutText = digits
+                                editing = editing.copy(detectTimeoutMs = digits.toLongOrNull() ?: 0L)
+                            },
+                            label = "감지 타임아웃 ms (비우면 무제한)",
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextField(
+                                value = matchJumpText,
+                                onValueChange = { raw ->
+                                    val digits = raw.filter(Char::isDigit).take(3)
+                                    matchJumpText = digits
+                                    editing = editing.copy(onMatchJumpOrder = digits.toIntOrNull()?.takeIf { it >= 1 })
+                                },
+                                label = "감지 시 이동 #",
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextField(
+                                value = timeoutJumpText,
+                                onValueChange = { raw ->
+                                    val digits = raw.filter(Char::isDigit).take(3)
+                                    timeoutJumpText = digits
+                                    editing = editing.copy(onTimeoutJumpOrder = digits.toIntOrNull()?.takeIf { it >= 1 })
+                                },
+                                label = "타임아웃 시 이동 #",
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
-                    ScenarioStepType.SINGLE_TAP -> {
+                    ScenarioStepType.COLOR_MATCH -> {
+                        HorizontalDivider()
+                        var hexText by remember(editing.id) {
+                            mutableStateOf(editing.targetColorHex?.let { String.format("%06X", it and 0xFFFFFFL) } ?: "3482FF")
+                        }
+                        TextField(
+                            value = hexText,
+                            onValueChange = { raw ->
+                                val clean = raw.uppercase().filter { it in '0'..'9' || it in 'A'..'F' }.take(6)
+                                hexText = clean
+                                val parsed = clean.toLongOrNull(16)
+                                if (clean.length == 6 && parsed != null) {
+                                    editing = editing.copy(targetColorHex = 0xFF000000L or parsed)
+                                }
+                            },
+                            label = "목표 색상 HEX (6자리, 예: FF3B30)",
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = "색상 허용 오차: ${editing.colorTolerance} (0~100)",
+                            style = MiuixTheme.textStyles.footnote1.copy(fontFeatureSettings = "tnum")
+                        )
+                        Slider(
+                            value = editing.colorTolerance.toFloat(),
+                            onValueChange = { editing = editing.copy(colorTolerance = it.roundToInt().coerceIn(2, 100)) },
+                            valueRange = 2f..100f,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    ScenarioStepType.DELAY_RANDOM -> {
                         HorizontalDivider()
                         TimeUnitValueRow(
-                            title = "클릭 지속시간",
+                            title = "최소 대기 시간",
+                            subtitle = "랜덤 대기 시작 범위 (ms)",
+                            value = editing.delayMinMs,
+                            unit = TimeUnitOption.MS,
+                            quickPresets = listOf(200L, 500L, 1000L),
+                            onChanged = { v, _ -> editing = editing.copy(delayMinMs = v.coerceAtLeast(50L)) }
+                        )
+                        TimeUnitValueRow(
+                            title = "최대 대기 시간",
+                            subtitle = "랜덤 대기 끝 범위 (ms)",
+                            value = editing.delayMaxMs.coerceAtLeast(editing.delayMinMs),
+                            unit = TimeUnitOption.MS,
+                            quickPresets = listOf(500L, 1200L, 3000L),
+                            onChanged = { v, _ -> editing = editing.copy(delayMaxMs = v.coerceAtLeast(editing.delayMinMs)) }
+                        )
+                    }
+                    ScenarioStepType.SINGLE_TAP,
+                    ScenarioStepType.LONG_PRESS -> {
+                        HorizontalDivider()
+                        TimeUnitValueRow(
+                            title = if (editing.type == ScenarioStepType.LONG_PRESS) "길게 누르기 시간" else "클릭 지속시간",
                             subtitle = "이 위치를 누르고 있는 시간 (ms)",
                             value = editing.tapDurationMs,
                             unit = TimeUnitOption.MS,
-                            quickPresets = listOf(20L, 40L, 100L),
+                            quickPresets = if (editing.type == ScenarioStepType.LONG_PRESS) listOf(500L, 800L, 1500L) else listOf(20L, 40L, 100L),
                             onChanged = { v, _ -> editing = editing.copy(tapDurationMs = v.coerceIn(10L, 60_000L)) }
                         )
                     }

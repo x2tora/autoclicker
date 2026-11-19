@@ -37,6 +37,7 @@ import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.Import
 import top.yukonga.miuix.kmp.icon.extended.Layers
 import top.yukonga.miuix.kmp.icon.extended.Location
+import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.squircle.squircleBackground
 import top.yukonga.miuix.kmp.squircle.squircleClip
@@ -66,6 +67,7 @@ fun PresetsScreen(
     onSaveCurrentScenario: () -> Unit,
     onExportPreset: (String) -> String?,
     onImportPreset: (String) -> Result<ClickPreset>,
+    onUpdatePresetBoundPackage: (String, String?) -> Unit,
     onNotify: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -77,6 +79,7 @@ fun PresetsScreen(
     var deletingPreset by remember { mutableStateOf<ClickPreset?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var renamingPreset by remember { mutableStateOf<ClickPreset?>(null) }
+    var bindingAppPreset by remember { mutableStateOf<ClickPreset?>(null) }
     var exportingPreset by remember { mutableStateOf<ClickPreset?>(null) }
     var pendingExportJson by remember { mutableStateOf<String?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
@@ -334,6 +337,22 @@ fun PresetsScreen(
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                                preset.boundPackageName?.let { pkg ->
+                                    Text(
+                                        text = "자동 연동 앱: $pkg",
+                                        style = MiuixTheme.textStyles.footnote2,
+                                        color = MiuixTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { bindingAppPreset = preset }) {
+                                Icon(
+                                    imageVector = MiuixIcons.Settings,
+                                    contentDescription = "앱 연동 설정",
+                                    tint = if (preset.boundPackageName != null) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
                             }
                             IconButton(onClick = { exportingPreset = preset }) {
                                 Icon(
@@ -553,6 +572,53 @@ fun PresetsScreen(
             onDismiss = { deletingPreset = null },
             onConfirm = { onDeletePreset(targetPreset.id) }
         )
+    }
+
+    bindingAppPreset?.let { targetPreset ->
+        var pkgText by remember(targetPreset.id) { mutableStateOf(targetPreset.boundPackageName ?: "") }
+        OverlayDialog(
+            show = true,
+            title = "앱 자동 전환 연동",
+            summary = "지정한 앱이 실행되면 이 프리셋으로 자동 전환합니다 (비우면 해제).",
+            onDismissRequest = { bindingAppPreset = null }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextField(
+                    value = pkgText,
+                    onValueChange = { pkgText = it },
+                    label = "패키지명 (예: com.game.example)",
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            onUpdatePresetBoundPackage(targetPreset.id, null)
+                            bindingAppPreset = null
+                            onNotify("앱 연동을 해제했습니다.")
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors()
+                    ) {
+                        Text("해제", style = MiuixTheme.textStyles.button)
+                    }
+                    Button(
+                        onClick = {
+                            onUpdatePresetBoundPackage(targetPreset.id, pkgText)
+                            bindingAppPreset = null
+                            onNotify("앱 연동을 저장했습니다.")
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColorsPrimary()
+                    ) {
+                        Text("저장", style = MiuixTheme.textStyles.button, color = MiuixTheme.colorScheme.onPrimary)
+                    }
+                }
+            }
+        }
     }
 }
 

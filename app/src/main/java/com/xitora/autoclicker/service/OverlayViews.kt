@@ -14,6 +14,7 @@ import android.widget.*
 import com.xitora.autoclicker.domain.ClickEngineCalculator
 import com.xitora.autoclicker.model.*
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -244,6 +245,7 @@ class FloatingControlPanelView(
     private val onCloseClick: () -> Unit,
     private val onSettingsClick: () -> Unit,
     private val onToggleLockClick: () -> Unit,
+    private val onRecordClick: () -> Unit,
     private val onAddTargetClick: () -> Unit,
     private val onRemoveTargetClick: () -> Unit,
     private val onToggleRunClick: () -> Unit,
@@ -251,14 +253,18 @@ class FloatingControlPanelView(
 ) : LinearLayout(context) {
 
     private val closeBtn: IconCanvasButton
+    private val collapseBtn: IconCanvasButton
     private val settingsBtn: IconCanvasButton
     private val lockBtn: IconCanvasButton
+    private val recordBtn: IconCanvasButton
     private val addBtn: IconCanvasButton
     private val removeBtn: IconCanvasButton
     private val playPauseBtn: PlayPauseCanvasButton
     private val elapsedLabel: TextView
     private val repeatLabel: TextView
     private val countLabel: TextView
+    private var isCollapsed: Boolean = false
+    private var lastMode: ClickMode = ClickMode.SINGLE
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private var downRawX = 0f
@@ -286,6 +292,16 @@ class FloatingControlPanelView(
             layoutParams = LayoutParams(btnSize, btnSize)
             setOnClickListener { onCloseClick() }
         }
+        collapseBtn = IconCanvasButton(context, IconKind.COLLAPSE).apply {
+            layoutParams = LayoutParams(btnSize, context.dpToPxInt(28f)).apply {
+                topMargin = context.dpToPxInt(4f)
+            }
+            setOnClickListener {
+                isCollapsed = !isCollapsed
+                isActive = isCollapsed
+                applyCollapseVisibility()
+            }
+        }
         settingsBtn = IconCanvasButton(context, IconKind.SETTINGS).apply {
             layoutParams = LayoutParams(btnSize, btnSize).apply {
                 topMargin = context.dpToPxInt(6f)
@@ -297,6 +313,12 @@ class FloatingControlPanelView(
                 topMargin = context.dpToPxInt(6f)
             }
             setOnClickListener { onToggleLockClick() }
+        }
+        recordBtn = IconCanvasButton(context, IconKind.RECORD).apply {
+            layoutParams = LayoutParams(btnSize, btnSize).apply {
+                topMargin = context.dpToPxInt(6f)
+            }
+            setOnClickListener { onRecordClick() }
         }
         addBtn = IconCanvasButton(context, IconKind.ADD).apply {
             layoutParams = LayoutParams(btnSize, btnSize).apply {
@@ -351,14 +373,30 @@ class FloatingControlPanelView(
         }
 
         addView(closeBtn)
+        addView(collapseBtn)
         addView(settingsBtn)
         addView(lockBtn)
+        addView(recordBtn)
         addView(addBtn)
         addView(removeBtn)
         addView(playPauseBtn)
         addView(elapsedLabel)
         addView(repeatLabel)
         addView(countLabel)
+    }
+
+    private fun applyCollapseVisibility() {
+        val showExtra = !isCollapsed
+        val showMulti = showExtra && (lastMode == ClickMode.MULTI || lastMode == ClickMode.SCENARIO)
+        closeBtn.visibility = if (showExtra) VISIBLE else GONE
+        settingsBtn.visibility = if (showExtra) VISIBLE else GONE
+        lockBtn.visibility = if (showExtra) VISIBLE else GONE
+        recordBtn.visibility = if (showExtra && lastMode == ClickMode.SCENARIO) VISIBLE else GONE
+        addBtn.visibility = if (showMulti) VISIBLE else GONE
+        removeBtn.visibility = if (showMulti) VISIBLE else GONE
+        elapsedLabel.visibility = if (showExtra) VISIBLE else GONE
+        repeatLabel.visibility = if (showExtra) VISIBLE else GONE
+        countLabel.visibility = if (showExtra) VISIBLE else GONE
     }
 
     fun updateState(
@@ -374,10 +412,11 @@ class FloatingControlPanelView(
         totalScenarioSteps: Int = 0,
         lastDetectScore: Int? = null
     ) {
-        val showMultiControls = mode == ClickMode.MULTI || mode == ClickMode.SCENARIO
+        lastMode = mode
         val editBlocked = isRunning || isLocked
-        addBtn.visibility = if (showMultiControls) VISIBLE else GONE
-        removeBtn.visibility = if (showMultiControls) VISIBLE else GONE
+        applyCollapseVisibility()
+        recordBtn.isEnabled = !editBlocked
+        recordBtn.alpha = if (editBlocked) 0.42f else 1f
         addBtn.isEnabled = !editBlocked
         removeBtn.isEnabled = !editBlocked
         addBtn.alpha = if (editBlocked) 0.42f else 1f
@@ -414,6 +453,7 @@ class FloatingControlPanelView(
             repeatLabel.setTextColor(labelCol)
             countLabel.setTextColor(labelCol)
             closeBtn.customTint = Color.parseColor("#B4B4BC")
+            collapseBtn.customTint = Color.parseColor("#B4B4BC")
             settingsBtn.customTint = Color.parseColor("#B4B4BC")
             lockBtn.customTint = Color.parseColor("#B4B4BC")
         } else {
@@ -424,6 +464,7 @@ class FloatingControlPanelView(
             repeatLabel.setTextColor(labelCol)
             countLabel.setTextColor(labelCol)
             closeBtn.customTint = null
+            collapseBtn.customTint = null
             settingsBtn.customTint = null
             lockBtn.customTint = null
         }
@@ -478,7 +519,7 @@ class FloatingControlPanelView(
         return super.onTouchEvent(event)
     }
 
-    private enum class IconKind { CLOSE, SETTINGS, LOCK, ADD, REMOVE }
+    private enum class IconKind { CLOSE, COLLAPSE, SETTINGS, LOCK, RECORD, ADD, REMOVE }
 
     @SuppressLint("ViewConstructor")
     private class IconCanvasButton(
@@ -579,6 +620,30 @@ class FloatingControlPanelView(
                         canvas.drawArc(shackleRect, 180f, 145f, false, paint)
                         canvas.drawLine(shackleRect.left, bodyTop, shackleRect.left, shackleRect.centerY(), paint)
                         canvas.drawRoundRect(bodyRect, corner, corner, paint)
+                    }
+                }
+                IconKind.RECORD -> {
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = context.dpToPx(2.0f)
+                    paint.color = Color.parseColor("#E05263")
+                    canvas.drawCircle(cx, cy, r * 0.95f, paint)
+                    paint.style = Paint.Style.FILL
+                    canvas.drawCircle(cx, cy, r * 0.52f, paint)
+                }
+                IconKind.COLLAPSE -> {
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = context.dpToPx(2.3f)
+                    paint.color = customTint ?: Color.parseColor("#24527A")
+                    val dx = r * 0.72f
+                    val dy = r * 0.40f
+                    if (isActive) {
+                        // Down chevron (expand)
+                        canvas.drawLine(cx - dx, cy - dy * 0.4f, cx, cy + dy * 0.8f, paint)
+                        canvas.drawLine(cx, cy + dy * 0.8f, cx + dx, cy - dy * 0.4f, paint)
+                    } else {
+                        // Up chevron (collapse)
+                        canvas.drawLine(cx - dx, cy + dy * 0.5f, cx, cy - dy * 0.7f, paint)
+                        canvas.drawLine(cx, cy - dy * 0.7f, cx + dx, cy + dy * 0.5f, paint)
                     }
                 }
             }
@@ -1076,6 +1141,7 @@ object OverlayModalFactory {
         isDark: Boolean,
         canDelete: Boolean,
         onPickOnScreen: (ScenarioStep) -> Unit,
+        onTestDetection: (ScenarioStep) -> Unit = {},
         onDelete: () -> Unit,
         onCancel: () -> Unit,
         onSave: (ScenarioStep) -> Unit
@@ -1137,11 +1203,14 @@ object OverlayModalFactory {
         val postDelayInput = createNumericEditText(context, step.postDelayMs.toString(), cardSurface, textPrimary)
 
         when (step.type) {
-            ScenarioStepType.REPEAT_UNTIL_DETECT -> {
+            ScenarioStepType.REPEAT_UNTIL_DETECT,
+            ScenarioStepType.WAIT_FOR_IMAGE,
+            ScenarioStepType.TAP_DETECTED_IMAGE -> {
                 body.addView(makeSectionLabel(context, "감지할 기준 이미지", textPrimary))
                 body.addView(TextView(context).apply {
+                    val roiNote = if (step.detectRoiRectNorm != null) " · 지정 영역(ROI) 고속 탐색" else " · 전체 화면 탐색"
                     text = if (!step.targetImagePath.isNullOrBlank()) {
-                        "이미지 등록됨 (유사도 ${step.imageSimilarityPercent}%)"
+                        "이미지 등록됨 (유사도 ${step.imageSimilarityPercent}%$roiNote)"
                     } else {
                         "아직 감지 이미지가 지정되지 않았습니다"
                     }
@@ -1159,7 +1228,7 @@ object OverlayModalFactory {
                     layoutParams = LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         context.dpToPxInt(40f)
-                    ).apply { bottomMargin = context.dpToPxInt(10f) }
+                    ).apply { bottomMargin = context.dpToPxInt(8f) }
                     setOnClickListener {
                         val draft = step.copy(
                             repeatIntervalMs = (repeatIntervalInput.text.toString().toLongOrNull() ?: step.repeatIntervalMs).coerceAtLeast(20L),
@@ -1170,6 +1239,28 @@ object OverlayModalFactory {
                 }
                 body.addView(pickScreenBtn)
 
+                if (!step.targetImagePath.isNullOrBlank()) {
+                    val testBtn = createActionButton(
+                        context = context,
+                        label = "현재 화면에서 인식 테스트",
+                        bgColor = cardSurface,
+                        textColor = textPrimary
+                    ).apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            context.dpToPxInt(38f)
+                        ).apply { bottomMargin = context.dpToPxInt(10f) }
+                        setOnClickListener {
+                            val draft = step.copy(
+                                repeatIntervalMs = (repeatIntervalInput.text.toString().toLongOrNull() ?: step.repeatIntervalMs).coerceAtLeast(20L),
+                                postDelayMs = (postDelayInput.text.toString().toLongOrNull() ?: step.postDelayMs).coerceAtLeast(20L)
+                            )
+                            onTestDetection(draft)
+                        }
+                    }
+                    body.addView(testBtn)
+                }
+
                 body.addView(makeSectionLabel(context, "반복 클릭 간격 (ms)", textPrimary))
                 body.addView(repeatIntervalInput.apply {
                     layoutParams = LinearLayout.LayoutParams(
@@ -1178,7 +1269,8 @@ object OverlayModalFactory {
                     ).apply { bottomMargin = context.dpToPxInt(8f) }
                 })
             }
-            ScenarioStepType.SINGLE_TAP -> {
+            ScenarioStepType.SINGLE_TAP,
+            ScenarioStepType.LONG_PRESS -> {
                 body.addView(makeSectionLabel(context, "클릭 지속시간 (ms)", textPrimary))
                 body.addView(tapDurationInput.apply {
                     layoutParams = LinearLayout.LayoutParams(
@@ -1187,6 +1279,8 @@ object OverlayModalFactory {
                     ).apply { bottomMargin = context.dpToPxInt(8f) }
                 })
             }
+            ScenarioStepType.DELAY_RANDOM,
+            ScenarioStepType.COLOR_MATCH -> Unit
             ScenarioStepType.SCROLL -> {
                 body.addView(makeSectionLabel(context, "스크롤 방향", textPrimary))
                 val dirRow = LinearLayout(context).apply {
@@ -1322,7 +1416,7 @@ object OverlayModalFactory {
         step: ScenarioStep,
         isDark: Boolean,
         resumeAfterSave: Boolean,
-        onSaveCropRect: (Rect) -> Unit,
+        onSaveCropRect: (Rect, Boolean) -> Unit,
         onCancel: () -> Unit
     ): View {
         val bgColor = if (isDark) Color.parseColor("#1C1C1E") else Color.parseColor("#FFFFFF")
@@ -1451,8 +1545,40 @@ object OverlayModalFactory {
             text = "감지할 버튼이나 배너 위를 드래그해 사각형으로 지정하세요."
             setTextColor(textSecondary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(10f))
+            setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(8f))
         })
+
+        var useRoi = true
+        val roiRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = context.dpToPxInt(10f) }
+        }
+        lateinit var roiOnlyChip: TextView
+        lateinit var fullScreenChip: TextView
+        roiOnlyChip = createPillChip(context, "이 영역(ROI)만 고속 탐색", true, cardSurface, textPrimary, emerald).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(34f), 1f).apply {
+                marginEnd = context.dpToPxInt(6f)
+            }
+            setOnClickListener {
+                useRoi = true
+                stylePillChip(context, roiOnlyChip, true, cardSurface, textPrimary, emerald)
+                stylePillChip(context, fullScreenChip, false, cardSurface, textPrimary, emerald)
+            }
+        }
+        fullScreenChip = createPillChip(context, "전체 화면 탐색", false, cardSurface, textPrimary, emerald).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(34f), 1f)
+            setOnClickListener {
+                useRoi = false
+                stylePillChip(context, roiOnlyChip, false, cardSurface, textPrimary, emerald)
+                stylePillChip(context, fullScreenChip, true, cardSurface, textPrimary, emerald)
+            }
+        }
+        roiRow.addView(roiOnlyChip)
+        roiRow.addView(fullScreenChip)
+        bottomCard.addView(roiRow)
 
         val btnRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1479,7 +1605,7 @@ object OverlayModalFactory {
             setOnClickListener {
                 val rect = selectedRect
                 if (rect != null && rect.width() >= 16 && rect.height() >= 16) {
-                    onSaveCropRect(rect)
+                    onSaveCropRect(rect, useRoi)
                 }
             }
         }
@@ -1495,6 +1621,257 @@ object OverlayModalFactory {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM
             ).apply {
+                val m = context.dpToPxInt(14f)
+                setMargins(m, m, m, context.dpToPxInt(28f))
+            }
+        )
+        return root
+    }
+
+    fun buildImageMatchTestOverlay(
+        context: Context,
+        step: ScenarioStep,
+        result: ScreenDetector.ImageMatchResult?,
+        isDark: Boolean,
+        onDismiss: () -> Unit
+    ): View {
+        val bgColor = if (isDark) Color.parseColor("#1C1C1E") else Color.parseColor("#FFFFFF")
+        val textPrimary = if (isDark) Color.parseColor("#F2F2F5") else Color.parseColor("#181C24")
+        val textSecondary = if (isDark) Color.parseColor("#9A9AA0") else Color.parseColor("#636D7E")
+        val matched = result?.matched == true
+        val accent = if (matched) Color.parseColor("#10B981") else Color.parseColor("#F59E0B")
+
+        val root = FrameLayout(context).apply {
+            setOnClickListener { onDismiss() }
+        }
+
+        val boxView = object : View(context) {
+            private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                color = Color.argb(56, Color.red(accent), Color.green(accent), Color.blue(accent))
+            }
+            private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = context.dpToPx(3f)
+                color = accent
+            }
+            private val winLoc = IntArray(2)
+
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val rect = result?.matchedRect ?: return
+                getLocationOnScreen(winLoc)
+                canvas.save()
+                canvas.translate(-winLoc[0].toFloat(), -winLoc[1].toFloat())
+                val rCorner = context.dpToPx(8f)
+                val rf = RectF(rect)
+                canvas.drawRoundRect(rf, rCorner, rCorner, fillPaint)
+                canvas.drawRoundRect(rf, rCorner, rCorner, strokePaint)
+                canvas.restore()
+            }
+        }
+        root.addView(
+            boxView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val card = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = context.dpToPxInt(16f)
+            setPadding(p, p, p, p)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = context.dpToPx(20f)
+                setColor(bgColor)
+                setStroke(context.dpToPxInt(1.5f), accent)
+            }
+            elevation = context.dpToPx(10f)
+            setOnClickListener { onDismiss() }
+        }
+        card.addView(TextView(context).apply {
+            text = when {
+                result == null -> "화면 캡처 실패 (잠시 후 다시 시도하세요)"
+                matched -> "이미지 감지 성공 (${result.bestScore}% ≥ 기준 ${step.imageSimilarityPercent}%)"
+                else -> "기준 미달 (${result.bestScore}% < 기준 ${step.imageSimilarityPercent}%)"
+            }
+            setTextColor(textPrimary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        })
+        card.addView(TextView(context).apply {
+            text = "화면을 탭하면 닫힙니다"
+            setTextColor(textSecondary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, context.dpToPxInt(4f), 0, 0)
+        })
+        root.addView(
+            card,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
+            ).apply {
+                val m = context.dpToPxInt(16f)
+                setMargins(m, m, m, context.dpToPxInt(36f))
+            }
+        )
+        root.postDelayed({ onDismiss() }, 2800L)
+        return root
+    }
+
+    fun buildTouchRecorderOverlay(
+        context: Context,
+        isDark: Boolean,
+        onFinish: (List<RecordedTouchEvent>) -> Unit,
+        onCancel: () -> Unit
+    ): View {
+        val bgColor = if (isDark) Color.parseColor("#1C1C1E") else Color.parseColor("#FFFFFF")
+        val cardSurface = if (isDark) Color.parseColor("#262629") else Color.parseColor("#F4F6FA")
+        val textPrimary = if (isDark) Color.parseColor("#F2F2F5") else Color.parseColor("#181C24")
+        val textSecondary = if (isDark) Color.parseColor("#9A9AA0") else Color.parseColor("#636D7E")
+        val primaryBlue = Color.parseColor("#3482FF")
+        val recordRed = Color.parseColor("#E05263")
+
+        val recorded = mutableListOf<RecordedTouchEvent>()
+        var lastEventEndMs = System.currentTimeMillis()
+        lateinit var countLabelView: TextView
+
+        val root = FrameLayout(context)
+        val recordCanvas = object : View(context) {
+            private val dimPaint = Paint().apply {
+                style = Paint.Style.FILL
+                color = Color.argb(64, 0, 0, 0)
+            }
+            private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                color = Color.argb(180, 224, 82, 99)
+            }
+            private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeCap = Paint.Cap.ROUND
+                strokeWidth = context.dpToPx(3f)
+                color = Color.argb(210, 52, 130, 255)
+            }
+            private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textSize = context.dpToPx(12f)
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            private val winLoc = IntArray(2)
+            private var downX = 0f
+            private var downY = 0f
+            private var downMs = 0L
+
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dimPaint)
+                getLocationOnScreen(winLoc)
+                canvas.save()
+                canvas.translate(-winLoc[0].toFloat(), -winLoc[1].toFloat())
+                val r = context.dpToPx(14f)
+                recorded.forEachIndexed { idx, ev ->
+                    if (hypot((ev.endX - ev.startX).toDouble(), (ev.endY - ev.startY).toDouble()) >= 36.0) {
+                        canvas.drawLine(ev.startX, ev.startY, ev.endX, ev.endY, linePaint)
+                    }
+                    canvas.drawCircle(ev.startX, ev.startY, r, dotPaint)
+                    val fm = textPaint.fontMetrics
+                    canvas.drawText((idx + 1).toString(), ev.startX, ev.startY - (fm.ascent + fm.descent) / 2f, textPaint)
+                }
+                canvas.restore()
+            }
+
+            @SuppressLint("ClickableViewAccessibility")
+            override fun onTouchEvent(event: MotionEvent): Boolean {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.rawX
+                        downY = event.rawY
+                        downMs = System.currentTimeMillis()
+                        return true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        val upMs = System.currentTimeMillis()
+                        val duration = (upMs - downMs).coerceAtLeast(30L)
+                        val delaySinceLast = if (recorded.isEmpty()) 450L else (downMs - lastEventEndMs).coerceIn(100L, 10_000L)
+                        if (recorded.isNotEmpty()) {
+                            val prev = recorded.last()
+                            recorded[recorded.lastIndex] = prev.copy(delayAfterMs = delaySinceLast)
+                        }
+                        recorded.add(
+                            RecordedTouchEvent(
+                                startX = downX,
+                                startY = downY,
+                                endX = event.rawX,
+                                endY = event.rawY,
+                                durationMs = duration,
+                                delayAfterMs = 450L
+                            )
+                        )
+                        lastEventEndMs = upMs
+                        countLabelView.text = "기록된 제스처: ${recorded.size}개 (터치 또는 드래그)"
+                        invalidate()
+                        return true
+                    }
+                }
+                return true
+            }
+        }
+        root.addView(recordCanvas, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        val bar = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = context.dpToPxInt(14f)
+            setPadding(p, p, p, p)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = context.dpToPx(20f)
+                setColor(bgColor)
+                setStroke(context.dpToPxInt(1.2f), recordRed)
+            }
+            elevation = context.dpToPx(10f)
+            setOnClickListener { /* consume */ }
+        }
+        countLabelView = TextView(context).apply {
+            text = "기록된 제스처: 0개 (터치 또는 드래그)"
+            setTextColor(textPrimary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        bar.addView(countLabelView)
+        bar.addView(TextView(context).apply {
+            text = "순서대로 탭·롱프레스·스크롤을 입력한 뒤 [추가]를 누르세요."
+            setTextColor(textSecondary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, context.dpToPxInt(2f), 0, context.dpToPxInt(10f))
+        })
+
+        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(createActionButton(context, "취소", cardSurface, textPrimary).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(40f), 0.8f).apply { marginEnd = context.dpToPxInt(6f) }
+            setOnClickListener { onCancel() }
+        })
+        row.addView(createActionButton(context, "되돌리기", cardSurface, textPrimary).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(40f), 0.9f).apply { marginEnd = context.dpToPxInt(6f) }
+            setOnClickListener {
+                if (recorded.isNotEmpty()) {
+                    recorded.removeAt(recorded.lastIndex)
+                    countLabelView.text = "기록된 제스처: ${recorded.size}개 (터치 또는 드래그)"
+                    recordCanvas.invalidate()
+                }
+            }
+        })
+        row.addView(createActionButton(context, "시나리오 추가", primaryBlue, Color.WHITE).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dpToPxInt(40f), 1.3f)
+            setOnClickListener { onFinish(recorded.toList()) }
+        })
+        bar.addView(row)
+        root.addView(
+            bar,
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply {
                 val m = context.dpToPxInt(14f)
                 setMargins(m, m, m, context.dpToPxInt(28f))
             }
