@@ -3,10 +3,9 @@ package com.xitora.autoclicker
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.os.SystemClock
 import android.view.View
-import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -28,26 +27,34 @@ import com.xitora.autoclicker.viewmodel.AutoClickerViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
-        var keepSplashOnScreen = savedInstanceState == null
-        splashScreen.setKeepOnScreenCondition { keepSplashOnScreen }
-        if (keepSplashOnScreen) {
-            Handler(Looper.getMainLooper()).postDelayed({
-                keepSplashOnScreen = false
-            }, 750L)
+        super.onCreate(savedInstanceState)
+        val splashDeadlineMs = SystemClock.elapsedRealtime() + if (savedInstanceState == null) 650L else 0L
+        splashScreen.setKeepOnScreenCondition {
+            SystemClock.elapsedRealtime() < splashDeadlineMs
         }
-        splashScreen.setOnExitAnimationListener { splashProvider ->
-            val fadeOut = ObjectAnimator.ofFloat(splashProvider.view, View.ALPHA, 1f, 0f)
-            val scaleX = ObjectAnimator.ofFloat(splashProvider.view, View.SCALE_X, 1f, 1.04f)
-            val scaleY = ObjectAnimator.ofFloat(splashProvider.view, View.SCALE_Y, 1f, 1.04f)
-            AnimatorSet().apply {
-                playTogether(fadeOut, scaleX, scaleY)
+        splashScreen.setOnExitAnimationListener { splashViewProvider ->
+            val interpolator = DecelerateInterpolator(1.6f)
+            val containerFade = ObjectAnimator.ofFloat(splashViewProvider.view, View.ALPHA, 1f, 0f).apply {
                 duration = 320L
-                interpolator = AccelerateDecelerateInterpolator()
-                doOnEnd { splashProvider.remove() }
+                this.interpolator = interpolator
+            }
+            val animators = mutableListOf<android.animation.Animator>(containerFade)
+            runCatching { splashViewProvider.iconView }.getOrNull()?.let { icon ->
+                animators += ObjectAnimator.ofFloat(icon, View.SCALE_X, 1f, 1.08f).apply {
+                    duration = 320L
+                    this.interpolator = interpolator
+                }
+                animators += ObjectAnimator.ofFloat(icon, View.SCALE_Y, 1f, 1.08f).apply {
+                    duration = 320L
+                    this.interpolator = interpolator
+                }
+            }
+            AnimatorSet().apply {
+                playTogether(animators)
+                doOnEnd { splashViewProvider.remove() }
                 start()
             }
         }
-        super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         setContent {

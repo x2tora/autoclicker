@@ -193,6 +193,7 @@ data class AppSettings(
     val themeColorStyle: ThemeColorStyle = ThemeColorStyle.DEFAULT,
     val customKeyColorHex: Long? = 0xFF3482FF,
     val navBarStyle: NavBarStyle = NavBarStyle.MIUIX,
+    val wideDualLayoutEnabled: Boolean = false,
     val targetSizeDp: Int = 46,
     val targetOpacityPercent: Int = 92,
     val showAntiBotZoneGuide: Boolean = true,

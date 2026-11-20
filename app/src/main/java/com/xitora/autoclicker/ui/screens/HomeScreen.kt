@@ -30,19 +30,17 @@ import com.xitora.autoclicker.ui.components.ScenarioStepEditDialog
 import com.xitora.autoclicker.ui.components.SquirclePillBadge
 import com.xitora.autoclicker.ui.components.TargetPointEditDialog
 import com.xitora.autoclicker.ui.components.TargetPreviewBadge
+import com.xitora.autoclicker.ui.theme.LocalWideDualLayoutEnabled
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Edit
 import top.yukonga.miuix.kmp.icon.extended.Favorites
-import top.yukonga.miuix.kmp.icon.extended.Help
 import top.yukonga.miuix.kmp.icon.extended.Layers
 import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Play
-import top.yukonga.miuix.kmp.icon.extended.Playlist
 import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.squircle.squircleBackground
 import top.yukonga.miuix.kmp.squircle.squircleBorder
@@ -57,7 +55,7 @@ fun HomeScreen(
     state: AutoClickerDataState,
     runtime: OverlayRuntimeState,
     scrollBehavior: ScrollBehavior,
-    bottomBarExtraPadding: Dp,
+    topInset: Dp = 0.dp,
     onLaunchMode: (ClickMode) -> Unit,
     onToggleClicking: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -81,6 +79,8 @@ fun HomeScreen(
     onNotify: (String) -> Unit
 ) {
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPad = 116.dp + navBottomInset
+    val wideDualEnabled = LocalWideDualLayoutEnabled.current
     var settingsSheetMode by remember { mutableStateOf<ClickMode?>(null) }
     var editingTarget by remember { mutableStateOf<TargetPoint?>(null) }
     var editingScenarioStep by remember { mutableStateOf<ScenarioStep?>(null) }
@@ -89,48 +89,35 @@ fun HomeScreen(
     val isMultiActive = runtime.isOverlayVisible && runtime.activeMode == ClickMode.MULTI
     val isScenarioActive = runtime.isOverlayVisible && runtime.activeMode == ClickMode.SCENARIO
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 8.dp,
-            bottom = bottomBarExtraPadding + navBottomInset
-        ),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item(key = "hero_status") {
-            FixedHomeStatusCard(
-                state = state,
-                runtime = runtime,
-                onToggleClicking = onToggleClicking,
-                onCloseOverlay = { onLaunchMode(runtime.activeMode) },
-                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
-                onOpenAppInfoSettings = onOpenAppInfoSettings,
-                onSavePresetClick = { onSavePresetClick(runtime.activeMode) },
-                onOpenTouchTest = { onNavigateTab(2) }
-            )
-        }
+    val singleIntervalMs = ClickEngineCalculator.toMillis(
+        state.singleConfig.intervalValue,
+        state.singleConfig.intervalUnit
+    )
+    val singleDurationMs = ClickEngineCalculator.toMillis(
+        state.singleConfig.durationValue,
+        state.singleConfig.durationUnit
+    )
+    val multiIntervalMs = ClickEngineCalculator.toMillis(
+        state.multiConfig.intervalValue,
+        state.multiConfig.intervalUnit
+    )
 
-        item(key = "mode_launch_cards") {
+    val heroCardSection: @Composable () -> Unit = {
+        FixedHomeStatusCard(
+            state = state,
+            runtime = runtime,
+            onToggleClicking = onToggleClicking,
+            onCloseOverlay = { onLaunchMode(runtime.activeMode) },
+            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+            onOpenAppInfoSettings = onOpenAppInfoSettings,
+            onSavePresetClick = { onSavePresetClick(runtime.activeMode) },
+            onOpenTouchTest = { onNavigateTab(2) }
+        )
+    }
+
+    val modeLaunchSection: @Composable () -> Unit = {
+        Column {
             SmallTitle(text = "클릭 모드 바로 실행")
-            val singleIntervalMs = ClickEngineCalculator.toMillis(
-                state.singleConfig.intervalValue,
-                state.singleConfig.intervalUnit
-            )
-            val singleDurationMs = ClickEngineCalculator.toMillis(
-                state.singleConfig.durationValue,
-                state.singleConfig.durationUnit
-            )
-            val multiIntervalMs = ClickEngineCalculator.toMillis(
-                state.multiConfig.intervalValue,
-                state.multiConfig.intervalUnit
-            )
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -161,77 +148,87 @@ fun HomeScreen(
                 )
             }
         }
+    }
 
-        item(key = "scenario_mode_card") {
-            ScenarioModeLaunchCard(
-                steps = state.scenarioSteps,
-                config = state.scenarioConfig,
-                isActive = isScenarioActive,
-                isClicking = runtime.isClicking && isScenarioActive,
-                currentStepOrder = runtime.currentScenarioStepOrder,
-                isAccessibilityEnabled = runtime.isAccessibilityEnabled,
-                onLaunchClick = { onLaunchMode(ClickMode.SCENARIO) },
-                onSettingsClick = { settingsSheetMode = ClickMode.SCENARIO }
-            )
-        }
+    val scenarioSection: @Composable () -> Unit = {
+        ScenarioModeLaunchCard(
+            steps = state.scenarioSteps,
+            config = state.scenarioConfig,
+            isActive = isScenarioActive,
+            isClicking = runtime.isClicking && isScenarioActive,
+            currentStepOrder = runtime.currentScenarioStepOrder,
+            isAccessibilityEnabled = runtime.isAccessibilityEnabled,
+            onLaunchClick = { onLaunchMode(ClickMode.SCENARIO) },
+            onSettingsClick = { settingsSheetMode = ClickMode.SCENARIO }
+        )
+    }
 
-        item(key = "recent_presets") {
-            RecentPresetsHomeSection(
-                presets = state.presets,
-                activeMode = runtime.activeMode,
-                onLaunchPreset = onLaunchPreset,
-                onSaveCurrent = { onSavePresetClick(runtime.activeMode) },
-                onOpenAllPresets = { onNavigateTab(1) }
-            )
-        }
+    val recentPresetsSection: @Composable () -> Unit = {
+        RecentPresetsHomeSection(
+            presets = state.presets,
+            activeMode = runtime.activeMode,
+            onLaunchPreset = onLaunchPreset,
+            onSaveCurrent = { onSavePresetClick(runtime.activeMode) },
+            onOpenAllPresets = { onNavigateTab(1) }
+        )
+    }
 
-        item(key = "quick_actions_grid") {
-            SmallTitle(text = "빠른 도구")
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWideDual = wideDualEnabled && maxWidth >= 600.dp
+        val singleSidePad = ((maxWidth - 600.dp) / 2f).coerceAtLeast(20.dp)
+
+        if (isWideDual) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .overScrollVertical()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(top = topInset + 12.dp, bottom = bottomPad),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    QuickActionGridCard(
-                        icon = MiuixIcons.Favorites,
-                        accentColor = Color(0xFFF59E0B),
-                        title = "프리셋 저장",
-                        subtitle = if (isMultiActive) "다중 타겟 구성" else "단일 타겟 구성",
-                        onClick = {
-                            onSavePresetClick(if (isMultiActive) ClickMode.MULTI else ClickMode.SINGLE)
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    QuickActionGridCard(
-                        icon = MiuixIcons.Playlist,
-                        accentColor = MiuixTheme.colorScheme.primary,
-                        title = "프리셋 보관함",
-                        subtitle = "저장된 구성 ${state.presets.size}개",
-                        onClick = { onNavigateTab(1) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    item(key = "hero_status") { heroCardSection() }
+                    item(key = "mode_launch_cards") { modeLaunchSection() }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .overScrollVertical()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(top = topInset + 12.dp, bottom = bottomPad),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    QuickActionGridCard(
-                        icon = MiuixIcons.Tune,
-                        accentColor = Color(0xFF06B6D4),
-                        title = "터치 테스트",
-                        subtitle = "실제 CPS · 분산 측정",
-                        onClick = { onNavigateTab(2) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    QuickActionGridCard(
-                        icon = MiuixIcons.Help,
-                        accentColor = Color(0xFF10B981),
-                        title = "권한 · 가이드",
-                        subtitle = "OneUI 제한 해제 안내",
-                        onClick = { onNavigateTab(3) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    item(key = "scenario_mode_card") { scenarioSection() }
+                    item(key = "recent_presets") { recentPresetsSection() }
                 }
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(
+                    start = singleSidePad,
+                    end = singleSidePad,
+                    top = topInset + 12.dp,
+                    bottom = bottomPad
+                ),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item(key = "hero_status") { heroCardSection() }
+                item(key = "mode_launch_cards") { modeLaunchSection() }
+                item(key = "scenario_mode_card") { scenarioSection() }
+                item(key = "recent_presets") { recentPresetsSection() }
             }
         }
     }
@@ -1054,10 +1051,10 @@ private fun ScenarioModeLaunchCard(
     )
     val firstDetect = steps.firstOrNull { it.type == ScenarioStepType.REPEAT_UNTIL_DETECT }
     val detectNote = when {
-        steps.isEmpty() -> "단계 없음 (⚙ 눌러 추가)"
+        steps.isEmpty() -> "단계 없음 (설정에서 추가)"
         firstDetect == null -> "${steps.size}단계 구성"
         !firstDetect.targetImagePath.isNullOrBlank() -> "업로드 이미지"
-        else -> "이미지 미지정 (⚙ 설정 필요)"
+        else -> "이미지 미지정 (설정 필요)"
     }
 
     Card(
@@ -1241,7 +1238,7 @@ private fun ScenarioStepRowCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = step.badgeText(),
+                        text = "#${step.order}",
                         style = MiuixTheme.textStyles.body2.copy(
                             fontWeight = FontWeight.Bold,
                             fontFeatureSettings = "tnum"
@@ -1448,50 +1445,6 @@ private fun ScenarioRepeatRuleCard(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickActionGridCard(
-    icon: ImageVector,
-    accentColor: Color,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .squircleClip(18.dp)
-            .clickable(onClick = onClick),
-        cornerRadius = 18.dp,
-        insideMargin = PaddingValues(14.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiuixGlassIcon(
-                icon = icon,
-                contentDescription = title,
-                accentColor = accentColor,
-                size = 36.dp,
-                iconSize = 18.dp
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = title,
-                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Bold),
-                    color = MiuixTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }

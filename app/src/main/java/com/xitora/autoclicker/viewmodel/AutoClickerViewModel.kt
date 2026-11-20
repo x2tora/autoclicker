@@ -156,6 +156,9 @@ class AutoClickerViewModel(application: Application) : AndroidViewModel(applicat
     fun updateNavBarStyle(style: NavBarStyle) =
         stateHolder.updateSettings { it.copy(navBarStyle = style) }
 
+    fun updateWideDualLayout(enabled: Boolean) =
+        stateHolder.updateSettings { it.copy(wideDualLayoutEnabled = enabled) }
+
     fun updateOverlayLocked(locked: Boolean) =
         stateHolder.updateSettings { it.copy(isOverlayLocked = locked) }
 

@@ -3,20 +3,21 @@ package com.xitora.autoclicker.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.xitora.autoclicker.BuildConfig
 import com.xitora.autoclicker.model.*
@@ -25,7 +26,6 @@ import com.xitora.autoclicker.ui.components.ConfirmActionDialog
 import com.xitora.autoclicker.ui.components.MiuixColorPickerDialog
 import com.xitora.autoclicker.ui.components.MiuixGlassIcon
 import com.xitora.autoclicker.ui.components.formatRgbHex
-import com.xitora.autoclicker.ui.theme.AccentPresetPalette
 import com.xitora.autoclicker.ui.theme.AutoClickerMotion
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -52,6 +52,7 @@ fun MoreSettingsScreen(
     onUpdateThemeColorStyle: (ThemeColorStyle) -> Unit,
     onUpdateCustomKeyColor: (Long?) -> Unit,
     onUpdateNavBarStyle: (NavBarStyle) -> Unit,
+    onUpdateWideDualLayout: (Boolean) -> Unit,
     onUpdateTargetSizeDp: (Int) -> Unit,
     onUpdateTargetOpacity: (Int) -> Unit,
     onUpdateShowAntiBotZoneGuide: (Boolean) -> Unit,
@@ -65,7 +66,8 @@ fun MoreSettingsScreen(
     onImportJson: (String) -> Result<Unit>,
     onResetAllData: () -> Unit,
     onCheckForUpdate: () -> Unit,
-    onNotify: (String) -> Unit
+    onNotify: (String) -> Unit,
+    topInset: Dp = 0.dp
 ) {
     val context = LocalContext.current
     @Suppress("DEPRECATION")
@@ -115,374 +117,280 @@ fun MoreSettingsScreen(
         }
     }
 
-    val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val preferenceMargin = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val sidePad = ((maxWidth - 620.dp) / 2f).coerceAtLeast(16.dp)
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp + navBottomInset),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            SmallTitle(text = "화면 · 테마 설정")
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = AutoClickerMotion.LayoutSizeSpring)
-            ) {
-                val options = ThemeOption.entries
-                OverlayDropdownPreference(
-                    title = "테마 모드",
-                    summary = state.settings.themeOption.label,
-                    items = options.map { it.label },
-                    selectedIndex = options.indexOf(state.settings.themeOption),
-                    onSelectedIndexChange = { onUpdateTheme(options[it]) },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Theme,
-                            contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                val colorStyles = ThemeColorStyle.entries
-                val colorStyle = state.settings.resolvedColorStyle()
-                OverlayDropdownPreference(
-                    title = "테마 컬러 스타일",
-                    summary = "${colorStyle.label} · ${colorStyle.description}",
-                    items = colorStyles.map { it.label },
-                    selectedIndex = colorStyles.indexOf(colorStyle),
-                    onSelectedIndexChange = { index ->
-                        val chosen = colorStyles[index]
-                        onUpdateThemeColorStyle(chosen)
-                        onNotify("테마 컬러가 '${chosen.label}'으로 적용되었습니다.")
-                    },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Favorites,
-                            contentDescription = null,
-                            accentColor = Color(0xFF7C5CFF),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                AnimatedVisibility(
-                    visible = colorStyle == ThemeColorStyle.CUSTOM,
-                    enter = AutoClickerMotion.expandEnter(),
-                    exit = AutoClickerMotion.shrinkExit()
-                ) {
-                    Column {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                        val previewHex = state.settings.customKeyColorHex ?: 0xFF3482FF
-                        ArrowPreference(
-                            title = "커스텀 포인트 색상 지정",
-                            summary = "현재 ${formatRgbHex(previewHex)} 적용 중 · 탭하여 변경",
-                            onClick = { showAppColorDialog = true },
-                            insideMargin = preferenceMargin,
-                            startAction = {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(end = 6.dp)
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(previewHex))
-                                )
-                            }
-                        )
-                    }
-                }
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                val navStyles = NavBarStyle.entries
-                val navStyle = state.settings.resolvedNavBarStyle()
-                OverlayDropdownPreference(
-                    title = "내비게이션 바 스타일",
-                    summary = "${navStyle.label} · ${navStyle.description}",
-                    items = navStyles.map { it.label },
-                    selectedIndex = navStyles.indexOf(navStyle),
-                    onSelectedIndexChange = { index ->
-                        val chosen = navStyles[index]
-                        onUpdateNavBarStyle(chosen)
-                        onNotify("내비게이션 바가 '${chosen.label}' 스타일로 변경되었습니다.")
-                    },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Tune,
-                            contentDescription = null,
-                            accentColor = Color(0xFF06B6D4),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-            }
-        }
-
-        item {
-            SmallTitle(text = "접근성 서비스 · 오버레이 외형")
-            Card(modifier = Modifier.fillMaxWidth()) {
-                ArrowPreference(
-                    title = "접근성 권한 상태",
-                    summary = if (isAccessibilityEnabled) {
-                        "활성화됨 · 오버레이 및 자동 터치 사용 가능"
-                    } else {
-                        "비활성화됨 · 탭하여 안드로이드 접근성 설정 열기"
-                    },
-                    onClick = onOpenAccessibilitySettings,
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Settings,
-                            contentDescription = null,
-                            accentColor = if (isAccessibilityEnabled) Color(0xFF10B981) else Color(0xFFF59E0B),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                ArrowPreference(
-                    title = "타겟 과녁 크기 · 투명도",
-                    summary = "크기 ${state.settings.targetSizeDp}dp · 불투명도 ${state.settings.targetOpacityPercent}%",
-                    onClick = { showOverlayStyleDialog = true },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Location,
-                            contentDescription = null,
-                            accentColor = Color(0xFF3482FF),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                SwitchPreference(
-                    title = "봇 방지 랜덤 영역 점선 원 표시",
-                    summary = "랜덤 클릭 활성화 시 타겟 주위에 점선 가이드를 표시",
-                    checked = state.settings.showAntiBotZoneGuide,
-                    onCheckedChange = onUpdateShowAntiBotZoneGuide,
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Stopwatch,
-                            contentDescription = null,
-                            accentColor = Color(0xFF06B6D4),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                SwitchPreference(
-                    title = "오버레이 타겟 위치 잠금",
-                    summary = "화면에 배치된 타겟을 실수로 이동·터치하지 않도록 잠급니다",
-                    checked = state.settings.isOverlayLocked,
-                    onCheckedChange = onUpdateOverlayLocked,
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Lock,
-                            contentDescription = null,
-                            accentColor = Color(0xFFF59E0B),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                SwitchPreference(
-                    title = "실행 중 화면 켜짐 유지",
-                    summary = "자동 터치 실행 동안 화면이 자동으로 꺼지지 않도록 유지",
-                    checked = state.settings.keepScreenOnWhileRunning,
-                    onCheckedChange = onUpdateKeepScreenOn,
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Play,
-                            contentDescription = null,
-                            accentColor = Color(0xFF10B981),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                val maxRunOptions = listOf(0 to "제한 없음", 30 to "30분", 60 to "1시간", 120 to "2시간", 240 to "4시간")
-                OverlayDropdownPreference(
-                    title = "최대 연속 실행 안전 정지",
-                    summary = maxRunOptions.firstOrNull { it.first == state.settings.maxRunMinutes }?.second
-                        ?: "${state.settings.maxRunMinutes}분",
-                    items = maxRunOptions.map { it.second },
-                    selectedIndex = maxRunOptions.indexOfFirst { it.first == state.settings.maxRunMinutes }.coerceAtLeast(0),
-                    onSelectedIndexChange = { idx -> onUpdateMaxRunMinutes(maxRunOptions[idx].first) },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Stopwatch,
-                            contentDescription = null,
-                            accentColor = Color(0xFF7C5CFF),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                val batteryOptions = listOf(0 to "사용 안 함", 10 to "10% 이하", 15 to "15% 이하", 20 to "20% 이하", 30 to "30% 이하")
-                OverlayDropdownPreference(
-                    title = "배터리 부족 시 자동 정지",
-                    summary = batteryOptions.firstOrNull { it.first == state.settings.batteryStopPercent }?.second
-                        ?: "${state.settings.batteryStopPercent}% 이하",
-                    items = batteryOptions.map { it.second },
-                    selectedIndex = batteryOptions.indexOfFirst { it.first == state.settings.batteryStopPercent }.coerceAtLeast(0),
-                    onSelectedIndexChange = { idx -> onUpdateBatteryStopPercent(batteryOptions[idx].first) },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Settings,
-                            contentDescription = null,
-                            accentColor = Color(0xFFF59E0B),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                SwitchPreference(
-                    title = "볼륨키 단축 제어",
-                    summary = "오버레이 표시 중 볼륨- 2연타: 시작/일시정지 · 볼륨+ 2연타: 잠금",
-                    checked = state.settings.volumeKeyControlEnabled,
-                    onCheckedChange = onUpdateVolumeKeyControl,
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Tune,
-                            contentDescription = null,
-                            accentColor = Color(0xFF06B6D4),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                SwitchPreference(
-                    title = "앱 실행 시 프리셋 자동 전환",
-                    summary = "프리셋에 연동한 앱이 열리면 자동으로 오버레이와 프리셋을 전환",
-                    checked = state.settings.autoSwitchPresetByApp,
-                    onCheckedChange = onUpdateAutoSwitchPresetByApp,
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Favorites,
-                            contentDescription = null,
-                            accentColor = Color(0xFF7C5CFF),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-            }
-        }
-
-        item {
-            SmallTitle(text = "로컬 데이터 백업 및 복원")
-            Card(modifier = Modifier.fillMaxWidth()) {
-                ArrowPreference(
-                    title = "JSON 파일로 내보내기 (백업)",
-                    summary = "모든 단일/다중 타겟 설정과 프리셋을 JSON 파일로 저장",
-                    onClick = {
-                        val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-                        exportFileLauncher.launch("autoclicker-backup-$today.json")
-                    },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Backup,
-                            contentDescription = null,
-                            accentColor = Color(0xFF3482FF),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                ArrowPreference(
-                    title = "JSON 파일에서 가져오기 (복원)",
-                    summary = "저장해 둔 JSON 백업 파일을 불러와 설정과 프리셋을 복원합니다",
-                    onClick = {
-                        importFileLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
-                    },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Import,
-                            contentDescription = null,
-                            accentColor = Color(0xFF10B981),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                ArrowPreference(
-                    title = "클립보드 백업 텍스트 복사 / 붙여넣기 복원",
-                    summary = "파일 없이 JSON 텍스트로 바로 백업하거나 복원합니다",
-                    onClick = { showPasteRestoreDialog = true },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Copy,
-                            contentDescription = null,
-                            accentColor = Color(0xFF06B6D4),
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                ArrowPreference(
-                    title = "모든 데이터 초기화",
-                    summary = "등록된 타겟 구성과 프리셋을 초기 상태로 되돌립니다 (테마 설정 유지)",
-                    onClick = { showResetConfirm = true },
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Reset,
-                            contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.error
-                        )
-                    }
-                )
-            }
-        }
-
-        item {
-            SmallTitle(text = "앱 정보 및 업데이트")
-            Card(modifier = Modifier.fillMaxWidth()) {
-                ArrowPreference(
-                    title = "앱 업데이트 확인",
-                    summary = when {
-                        updateUiState.isChecking -> "GitHub 릴리즈에서 최신 버전을 확인하는 중..."
-                        !updateUiState.lastStatusNote.isNullOrBlank() -> "현재 v${BuildConfig.VERSION_NAME} · ${updateUiState.lastStatusNote}"
-                        else -> "현재 v${BuildConfig.VERSION_NAME} · 앱 실행 시 자동 확인 (탭하여 지금 확인)"
-                    },
-                    onClick = onCheckForUpdate,
-                    insideMargin = preferenceMargin,
-                    startAction = {
-                        MiuixGlassIcon(
-                            icon = MiuixIcons.Store,
-                            contentDescription = null,
-                            accentColor = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        "오토 클리커 (AutoClicker) v${BuildConfig.VERSION_NAME}",
-                        style = MiuixTheme.textStyles.body1
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = PaddingValues(start = sidePad, end = sidePad, top = topInset + 8.dp, bottom = 110.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                SmallTitle(text = "화면 · 테마 설정")
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    val options = ThemeOption.entries
+                    OverlayDropdownPreference(
+                        title = "테마 모드",
+                        summary = state.settings.themeOption.label,
+                        items = options.map { it.label },
+                        selectedIndex = options.indexOf(state.settings.themeOption),
+                        onSelectedIndexChange = { onUpdateTheme(options[it]) },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Theme, MiuixTheme.colorScheme.primary)
+                        }
                     )
-                    Text(
-                        "단일·다중 타겟 플로팅 오버레이 및 봇 방지 랜덤 터치 지원",
-                        style = MiuixTheme.textStyles.footnote2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    val colorStyles = ThemeColorStyle.entries
+                    val colorStyle = state.settings.resolvedColorStyle()
+                    OverlayDropdownPreference(
+                        title = "테마 컬러 스타일",
+                        summary = colorStyle.label,
+                        items = colorStyles.map { it.label },
+                        selectedIndex = colorStyles.indexOf(colorStyle),
+                        onSelectedIndexChange = { index ->
+                            val chosen = colorStyles[index]
+                            onUpdateThemeColorStyle(chosen)
+                            onNotify("테마 컬러가 '${chosen.label}'으로 적용되었습니다")
+                        },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Favorites, Color(0xFF7C5CFF))
+                        }
+                    )
+                    AnimatedVisibility(
+                        visible = colorStyle == ThemeColorStyle.CUSTOM,
+                        enter = AutoClickerMotion.expandEnter(),
+                        exit = AutoClickerMotion.shrinkExit()
+                    ) {
+                        val previewHex = state.settings.customKeyColorHex ?: 0xFF3482FF
+                        Column {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                            ArrowPreference(
+                                title = "커스텀 포인트 색상 지정",
+                                summary = "현재 ${formatRgbHex(previewHex)} 적용 중 · 탭하여 변경",
+                                onClick = { showAppColorDialog = true },
+                                startAction = {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(end = 8.dp)
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(previewHex))
+                                            .border(1.dp, MiuixTheme.colorScheme.onSurface.copy(alpha = 0.16f), CircleShape)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    val navStyles = NavBarStyle.entries
+                    val navStyle = state.settings.resolvedNavBarStyle()
+                    OverlayDropdownPreference(
+                        title = "인터페이스 스타일",
+                        summary = navStyle.label,
+                        items = navStyles.map { it.label },
+                        selectedIndex = navStyles.indexOf(navStyle),
+                        onSelectedIndexChange = { index ->
+                            val chosen = navStyles[index]
+                            onUpdateNavBarStyle(chosen)
+                            onNotify("인터페이스 스타일이 '${chosen.label}'으로 적용되었습니다")
+                        },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Tune, Color(0xFF14B8A6))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SwitchPreference(
+                        title = "대화면 듀얼 칼럼 보기",
+                        summary = "태블릿·폴더블에서 좌우 2단 분할 표시",
+                        checked = state.settings.wideDualLayoutEnabled,
+                        onCheckedChange = { enabled ->
+                            onUpdateWideDualLayout(enabled)
+                            onNotify(
+                                if (enabled) "넓은 화면에서 듀얼 칼럼 레이아웃이 활성화되었습니다"
+                                else "대화면에서도 중앙 단일 보기로 표시됩니다"
+                            )
+                        },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.ScreenMirroring, Color(0xFF3B82F6))
+                        }
+                    )
+                }
+            }
+
+            item {
+                SmallTitle(text = "접근성 서비스 · 오버레이 외형")
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    ArrowPreference(
+                        title = "접근성 권한 상태",
+                        summary = if (isAccessibilityEnabled) {
+                            "활성화됨 · 오버레이 및 자동 터치 사용 가능"
+                        } else {
+                            "비활성화됨 · 탭하여 안드로이드 접근성 설정 열기"
+                        },
+                        onClick = onOpenAccessibilitySettings,
+                        startAction = {
+                            PreferenceStartIcon(
+                                MiuixIcons.Settings,
+                                if (isAccessibilityEnabled) Color(0xFF10B981) else Color(0xFFF59E0B)
+                            )
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ArrowPreference(
+                        title = "타겟 과녁 크기 · 투명도",
+                        summary = "크기 ${state.settings.targetSizeDp}dp · 불투명도 ${state.settings.targetOpacityPercent}%",
+                        onClick = { showOverlayStyleDialog = true },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Location, Color(0xFF3482FF))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SwitchPreference(
+                        title = "봇 방지 랜덤 영역 점선 원 표시",
+                        summary = "랜덤 클릭 활성화 시 타겟 주위에 점선 가이드를 표시",
+                        checked = state.settings.showAntiBotZoneGuide,
+                        onCheckedChange = onUpdateShowAntiBotZoneGuide,
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Stopwatch, Color(0xFF06B6D4))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SwitchPreference(
+                        title = "오버레이 타겟 위치 잠금",
+                        summary = "화면에 배치된 타겟을 실수로 이동·터치하지 않도록 잠급니다",
+                        checked = state.settings.isOverlayLocked,
+                        onCheckedChange = onUpdateOverlayLocked,
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Lock, Color(0xFFF59E0B))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SwitchPreference(
+                        title = "실행 중 화면 켜짐 유지",
+                        summary = "자동 터치 실행 동안 화면이 자동으로 꺼지지 않도록 유지",
+                        checked = state.settings.keepScreenOnWhileRunning,
+                        onCheckedChange = onUpdateKeepScreenOn,
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Play, Color(0xFF10B981))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    val maxRunOptions = listOf(0 to "제한 없음", 30 to "30분", 60 to "1시간", 120 to "2시간", 240 to "4시간")
+                    OverlayDropdownPreference(
+                        title = "최대 연속 실행 안전 정지",
+                        summary = maxRunOptions.firstOrNull { it.first == state.settings.maxRunMinutes }?.second
+                            ?: "${state.settings.maxRunMinutes}분",
+                        items = maxRunOptions.map { it.second },
+                        selectedIndex = maxRunOptions.indexOfFirst { it.first == state.settings.maxRunMinutes }.coerceAtLeast(0),
+                        onSelectedIndexChange = { idx -> onUpdateMaxRunMinutes(maxRunOptions[idx].first) },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Stopwatch, Color(0xFF7C5CFF))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    val batteryOptions = listOf(0 to "사용 안 함", 10 to "10% 이하", 15 to "15% 이하", 20 to "20% 이하", 30 to "30% 이하")
+                    OverlayDropdownPreference(
+                        title = "배터리 부족 시 자동 정지",
+                        summary = batteryOptions.firstOrNull { it.first == state.settings.batteryStopPercent }?.second
+                            ?: "${state.settings.batteryStopPercent}% 이하",
+                        items = batteryOptions.map { it.second },
+                        selectedIndex = batteryOptions.indexOfFirst { it.first == state.settings.batteryStopPercent }.coerceAtLeast(0),
+                        onSelectedIndexChange = { idx -> onUpdateBatteryStopPercent(batteryOptions[idx].first) },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Settings, Color(0xFFF59E0B))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SwitchPreference(
+                        title = "볼륨키 단축 제어",
+                        summary = "오버레이 표시 중 볼륨- 2연타: 시작/일시정지 · 볼륨+ 2연타: 잠금",
+                        checked = state.settings.volumeKeyControlEnabled,
+                        onCheckedChange = onUpdateVolumeKeyControl,
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Tune, Color(0xFF06B6D4))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SwitchPreference(
+                        title = "앱 실행 시 프리셋 자동 전환",
+                        summary = "프리셋에 연동한 앱이 열리면 자동으로 오버레이와 프리셋을 전환",
+                        checked = state.settings.autoSwitchPresetByApp,
+                        onCheckedChange = onUpdateAutoSwitchPresetByApp,
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Favorites, Color(0xFF7C5CFF))
+                        }
+                    )
+                }
+            }
+
+            item {
+                SmallTitle(text = "백업 및 데이터")
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    ArrowPreference(
+                        title = "JSON 백업 내보내기",
+                        onClick = {
+                            val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                            exportFileLauncher.launch("autoclicker-backup-$today.json")
+                        },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Backup, Color(0xFF3482FF))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ArrowPreference(
+                        title = "JSON 백업 가져오기",
+                        onClick = {
+                            importFileLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                        },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Import, Color(0xFF10B981))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ArrowPreference(
+                        title = "클립보드 백업 · 복원",
+                        onClick = { showPasteRestoreDialog = true },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Copy, Color(0xFF06B6D4))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ArrowPreference(
+                        title = "모든 데이터 초기화",
+                        summary = "테마·기본 설정은 유지됩니다",
+                        onClick = { showResetConfirm = true },
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Reset, MiuixTheme.colorScheme.error)
+                        }
+                    )
+                }
+            }
+
+            item {
+                SmallTitle(text = "앱 정보 및 업데이트")
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    ArrowPreference(
+                        title = "앱 업데이트 확인",
+                        summary = when {
+                            updateUiState.isChecking -> "확인 중"
+                            !updateUiState.lastStatusNote.isNullOrBlank() -> "v${BuildConfig.VERSION_NAME} · ${updateUiState.lastStatusNote}"
+                            else -> "v${BuildConfig.VERSION_NAME}"
+                        },
+                        onClick = onCheckForUpdate,
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Store, Color(0xFF3B82F6))
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    BasicComponent(
+                        title = "AutoClicker",
+                        summary = "v${BuildConfig.VERSION_NAME}",
+                        startAction = {
+                            PreferenceStartIcon(MiuixIcons.Info, Color(0xFF64748B))
+                        }
                     )
                 }
             }
@@ -587,5 +495,21 @@ fun MoreSettingsScreen(
             onResetAllData()
             onNotify("모든 데이터가 초기화되었습니다.")
         }
+    )
+}
+
+@Composable
+private fun PreferenceStartIcon(
+    icon: ImageVector,
+    accentColor: Color
+) {
+    MiuixGlassIcon(
+        icon = icon,
+        contentDescription = null,
+        accentColor = accentColor,
+        modifier = Modifier.padding(end = 6.dp),
+        size = 38.dp,
+        iconSize = 18.dp,
+        cornerRadius = 11.dp
     )
 }

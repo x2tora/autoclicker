@@ -28,6 +28,7 @@ import com.xitora.autoclicker.ui.components.ConfirmActionDialog
 import com.xitora.autoclicker.ui.components.EmptyDataBanner
 import com.xitora.autoclicker.ui.components.MiuixGlassIcon
 import com.xitora.autoclicker.ui.components.SquirclePillBadge
+import com.xitora.autoclicker.ui.theme.LocalWideDualLayoutEnabled
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Backup
@@ -58,7 +59,7 @@ private enum class PresetFilter(val label: String, val mode: ClickMode?) {
 fun PresetsScreen(
     state: AutoClickerDataState,
     scrollBehavior: ScrollBehavior,
-    bottomBarExtraPadding: Dp,
+    topInset: Dp = 0.dp,
     onApplyPreset: (ClickPreset, Boolean) -> Unit,
     onRenamePreset: (String, String) -> Unit,
     onDeletePreset: (String) -> Unit,
@@ -74,6 +75,8 @@ fun PresetsScreen(
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPad = 116.dp + navBottomInset
+    val wideDualEnabled = LocalWideDualLayoutEnabled.current
 
     var selectedFilter by remember { mutableStateOf(PresetFilter.ALL) }
     var deletingPreset by remember { mutableStateOf<ClickPreset?>(null) }
@@ -128,20 +131,8 @@ fun PresetsScreen(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 8.dp,
-            bottom = bottomBarExtraPadding + navBottomInset
-        ),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item(key = "preset_quick_actions") {
+    val quickActionsSection: @Composable () -> Unit = {
+        Column {
             SmallTitle(text = "새 프리셋 저장 · 개별 가져오기")
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -205,64 +196,60 @@ fun PresetsScreen(
                 }
             }
         }
+    }
 
-        if (state.presets.isNotEmpty()) {
-            item(key = "preset_filter_search") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SmallTitle(text = "보관함 (${filteredPresets.size}/${state.presets.size})")
+    val filterSearchSection: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SmallTitle(text = "보관함 (${filteredPresets.size}/${state.presets.size})")
+            }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(PresetFilter.entries) { filter ->
+                    val count = if (filter.mode == null) {
+                        state.presets.size
+                    } else {
+                        state.presets.count { it.mode == filter.mode }
                     }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(PresetFilter.entries) { filter ->
-                            val count = if (filter.mode == null) {
-                                state.presets.size
-                            } else {
-                                state.presets.count { it.mode == filter.mode }
-                            }
-                            val selected = selectedFilter == filter
-                            SquirclePillBadge(
-                                text = "${filter.label} $count",
-                                backgroundColor = if (selected) {
-                                    MiuixTheme.colorScheme.primary
-                                } else {
-                                    MiuixTheme.colorScheme.secondaryContainer
-                                },
-                                contentColor = if (selected) {
-                                    MiuixTheme.colorScheme.onPrimary
-                                } else {
-                                    MiuixTheme.colorScheme.onSecondaryContainer
-                                },
-                                onClick = { selectedFilter = filter }
-                            )
-                        }
-                    }
-                    if (state.presets.size >= 3) {
-                        TextField(
-                            value = searchQuery,
-                            onValueChange = { if (it.length <= 32) searchQuery = it },
-                            label = "프리셋 이름 검색",
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    val selected = selectedFilter == filter
+                    SquirclePillBadge(
+                        text = "${filter.label} $count",
+                        backgroundColor = if (selected) {
+                            MiuixTheme.colorScheme.primary
+                        } else {
+                            MiuixTheme.colorScheme.secondaryContainer
+                        },
+                        contentColor = if (selected) {
+                            MiuixTheme.colorScheme.onPrimary
+                        } else {
+                            MiuixTheme.colorScheme.onSecondaryContainer
+                        },
+                        onClick = { selectedFilter = filter }
+                    )
                 }
             }
-        } else {
-            item(key = "preset_empty_title") {
-                SmallTitle(text = "저장된 프리셋 (0개)")
+            if (state.presets.size >= 3) {
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { if (it.length <= 32) searchQuery = it },
+                    label = "프리셋 이름 검색",
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
+    }
 
+    val listSection: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
         if (state.presets.isEmpty()) {
             item(key = "preset_empty") {
                 EmptyDataBanner(
                     icon = MiuixIcons.Favorites,
                     title = "저장된 프리셋이 없습니다",
-                    subtitle = "위에서 현재 단일·다중·시나리오 설정을 저장하거나, 공유받은 개별 프리셋 JSON 파일을 바로 가져올 수 있습니다."
+                    subtitle = "현재 단일·다중·시나리오 설정을 저장하거나, 공유받은 개별 프리셋 JSON 파일을 바로 가져올 수 있습니다."
                 )
             }
         } else if (filteredPresets.isEmpty()) {
@@ -280,128 +267,82 @@ fun PresetsScreen(
             }
         } else {
             items(filteredPresets, key = { it.id }) { preset ->
-                val accent = when (preset.mode) {
-                    ClickMode.SINGLE -> MiuixTheme.colorScheme.primary
-                    ClickMode.MULTI -> Color(0xFF2B8A3E)
-                    ClickMode.SCENARIO -> Color(0xFF7C5CFF)
-                }
-                val icon = when (preset.mode) {
-                    ClickMode.SINGLE -> MiuixIcons.Location
-                    ClickMode.MULTI -> MiuixIcons.Layers
-                    ClickMode.SCENARIO -> MiuixIcons.Favorites
-                }
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateItem(),
-                    cornerRadius = 18.dp,
-                    insideMargin = PaddingValues(16.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            MiuixGlassIcon(
-                                icon = icon,
-                                contentDescription = null,
-                                accentColor = accent
-                            )
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    text = preset.name,
-                                    style = MiuixTheme.textStyles.headline2.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MiuixTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                val modeText = when (preset.mode) {
-                                    ClickMode.SINGLE -> "단일 타겟"
-                                    ClickMode.MULTI -> "다중 타겟 (${preset.targets.size}개)"
-                                    ClickMode.SCENARIO -> "시나리오 (${preset.scenarioSteps.size}단계)"
-                                }
-                                val ivMs = ClickEngineCalculator.toMillis(preset.timing.intervalValue, preset.timing.intervalUnit)
-                                val summaryText = if (preset.mode == ClickMode.SCENARIO) {
-                                    "$modeText · ${ClickEngineCalculator.formatRepeatSummary(preset.timing)}"
-                                } else {
-                                    "$modeText · 간격 ${ivMs}ms · ${ClickEngineCalculator.formatRepeatSummary(preset.timing)}"
-                                }
-                                Text(
-                                    text = summaryText,
-                                    style = MiuixTheme.textStyles.footnote2.copy(fontFeatureSettings = "tnum"),
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                preset.boundPackageName?.let { pkg ->
-                                    Text(
-                                        text = "자동 연동 앱: $pkg",
-                                        style = MiuixTheme.textStyles.footnote2,
-                                        color = MiuixTheme.colorScheme.primary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                            IconButton(onClick = { bindingAppPreset = preset }) {
-                                Icon(
-                                    imageVector = MiuixIcons.Settings,
-                                    contentDescription = "앱 연동 설정",
-                                    tint = if (preset.boundPackageName != null) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                )
-                            }
-                            IconButton(onClick = { exportingPreset = preset }) {
-                                Icon(
-                                    imageVector = MiuixIcons.Backup,
-                                    contentDescription = "개별 내보내기",
-                                    tint = accent
-                                )
-                            }
-                            IconButton(onClick = { renamingPreset = preset }) {
-                                Icon(
-                                    imageVector = MiuixIcons.Edit,
-                                    contentDescription = "이름 변경",
-                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                )
-                            }
-                            IconButton(onClick = { deletingPreset = preset }) {
-                                Icon(
-                                    imageVector = MiuixIcons.Delete,
-                                    contentDescription = "프리셋 삭제",
-                                    tint = MiuixTheme.colorScheme.error
-                                )
-                            }
-                        }
+                PresetCardItem(
+                    preset = preset,
+                    onBindApp = { bindingAppPreset = preset },
+                    onExport = { exportingPreset = preset },
+                    onRename = { renamingPreset = preset },
+                    onDelete = { deletingPreset = preset },
+                    onApply = { launch -> onApplyPreset(preset, launch) },
+                    modifier = Modifier.animateItem()
+                )
+            }
+        }
+    }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Button(
-                                onClick = { onApplyPreset(preset, false) },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors()
-                            ) {
-                                Text("설정 불러오기", style = MiuixTheme.textStyles.button)
-                            }
-                            Button(
-                                onClick = { onApplyPreset(preset, true) },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColorsPrimary()
-                            ) {
-                                Text(
-                                    text = "불러와 실행",
-                                    style = MiuixTheme.textStyles.button,
-                                    color = MiuixTheme.colorScheme.onPrimary
-                                )
-                            }
-                        }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWideDual = wideDualEnabled && maxWidth >= 600.dp
+        val singleSidePad = ((maxWidth - 600.dp) / 2f).coerceAtLeast(20.dp)
+
+        if (isWideDual) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .overScrollVertical()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(top = topInset + 12.dp, bottom = bottomPad),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item(key = "preset_quick_actions") { quickActionsSection() }
+                    if (state.presets.isNotEmpty()) {
+                        item(key = "preset_filter_search") { filterSearchSection() }
                     }
                 }
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .overScrollVertical()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(top = topInset + 12.dp, bottom = bottomPad),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item(key = "preset_list_title") {
+                        SmallTitle(text = if (state.presets.isEmpty()) "저장된 프리셋 (0개)" else "저장된 목록 (${filteredPresets.size}개)")
+                    }
+                    listSection()
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(
+                    start = singleSidePad,
+                    end = singleSidePad,
+                    top = topInset + 12.dp,
+                    bottom = bottomPad
+                ),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item(key = "preset_quick_actions") { quickActionsSection() }
+                if (state.presets.isNotEmpty()) {
+                    item(key = "preset_filter_search") { filterSearchSection() }
+                } else {
+                    item(key = "preset_empty_title") {
+                        SmallTitle(text = "저장된 프리셋 (0개)")
+                    }
+                }
+                listSection()
             }
         }
     }
@@ -414,7 +355,8 @@ fun PresetsScreen(
             onDismissRequest = { exportingPreset = null }
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
+                TextButton(
+                    text = "JSON 파일로 저장",
                     onClick = {
                         val json = onExportPreset(preset.id)
                         if (json != null) {
@@ -431,16 +373,11 @@ fun PresetsScreen(
                             onNotify("프리셋 데이터를 찾을 수 없습니다.")
                         }
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColorsPrimary()
-                ) {
-                    Text(
-                        text = "JSON 파일로 저장",
-                        style = MiuixTheme.textStyles.button,
-                        color = MiuixTheme.colorScheme.onPrimary
-                    )
-                }
-                Button(
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(
+                    text = "클립보드에 JSON 복사",
                     onClick = {
                         val json = onExportPreset(preset.id)
                         if (json != null) {
@@ -451,11 +388,8 @@ fun PresetsScreen(
                         }
                         exportingPreset = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors()
-                ) {
-                    Text("클립보드에 JSON 복사", style = MiuixTheme.textStyles.button)
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
                 TextButton(
                     text = "닫기",
                     onClick = { exportingPreset = null },
@@ -473,15 +407,13 @@ fun PresetsScreen(
         onDismissRequest = { showImportDialog = false }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(
+            TextButton(
+                text = "JSON 파일 선택하기",
                 onClick = {
                     importPresetLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                 },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors()
-            ) {
-                Text("JSON 파일 선택하기", style = MiuixTheme.textStyles.button)
-            }
+                modifier = Modifier.fillMaxWidth()
+            )
             TextField(
                 value = pastePresetJson,
                 onValueChange = { pastePresetJson = it },
@@ -536,27 +468,20 @@ fun PresetsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Button(
+                    TextButton(
+                        text = "취소",
                         onClick = { renamingPreset = null },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors()
-                    ) {
-                        Text("취소", style = MiuixTheme.textStyles.button)
-                    }
-                    Button(
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        text = "저장",
                         onClick = {
                             onRenamePreset(targetPreset.id, text)
                             renamingPreset = null
                         },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColorsPrimary()
-                    ) {
-                        Text(
-                            text = "저장",
-                            style = MiuixTheme.textStyles.button,
-                            color = MiuixTheme.colorScheme.onPrimary
-                        )
-                    }
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -594,29 +519,151 @@ fun PresetsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Button(
+                    TextButton(
+                        text = "해제",
                         onClick = {
                             onUpdatePresetBoundPackage(targetPreset.id, null)
                             bindingAppPreset = null
                             onNotify("앱 연동을 해제했습니다.")
                         },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors()
-                    ) {
-                        Text("해제", style = MiuixTheme.textStyles.button)
-                    }
-                    Button(
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        text = "저장",
                         onClick = {
                             onUpdatePresetBoundPackage(targetPreset.id, pkgText)
                             bindingAppPreset = null
                             onNotify("앱 연동을 저장했습니다.")
                         },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColorsPrimary()
-                    ) {
-                        Text("저장", style = MiuixTheme.textStyles.button, color = MiuixTheme.colorScheme.onPrimary)
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresetCardItem(
+    preset: ClickPreset,
+    onBindApp: () -> Unit,
+    onExport: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onApply: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = when (preset.mode) {
+        ClickMode.SINGLE -> MiuixTheme.colorScheme.primary
+        ClickMode.MULTI -> Color(0xFF2B8A3E)
+        ClickMode.SCENARIO -> Color(0xFF7C5CFF)
+    }
+    val icon = when (preset.mode) {
+        ClickMode.SINGLE -> MiuixIcons.Location
+        ClickMode.MULTI -> MiuixIcons.Layers
+        ClickMode.SCENARIO -> MiuixIcons.Favorites
+    }
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        cornerRadius = 18.dp,
+        insideMargin = PaddingValues(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MiuixGlassIcon(
+                    icon = icon,
+                    contentDescription = null,
+                    accentColor = accent
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = preset.name,
+                        style = MiuixTheme.textStyles.headline2.copy(fontWeight = FontWeight.SemiBold),
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val modeText = when (preset.mode) {
+                        ClickMode.SINGLE -> "단일 타겟"
+                        ClickMode.MULTI -> "다중 타겟 (${preset.targets.size}개)"
+                        ClickMode.SCENARIO -> "시나리오 (${preset.scenarioSteps.size}단계)"
+                    }
+                    val ivMs = ClickEngineCalculator.toMillis(preset.timing.intervalValue, preset.timing.intervalUnit)
+                    val summaryText = if (preset.mode == ClickMode.SCENARIO) {
+                        "$modeText · ${ClickEngineCalculator.formatRepeatSummary(preset.timing)}"
+                    } else {
+                        "$modeText · 간격 ${ivMs}ms · ${ClickEngineCalculator.formatRepeatSummary(preset.timing)}"
+                    }
+                    Text(
+                        text = summaryText,
+                        style = MiuixTheme.textStyles.footnote2.copy(fontFeatureSettings = "tnum"),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    preset.boundPackageName?.let { pkg ->
+                        Text(
+                            text = "자동 연동 앱: $pkg",
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = MiuixTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
+                IconButton(onClick = onBindApp) {
+                    Icon(
+                        imageVector = MiuixIcons.Settings,
+                        contentDescription = "앱 연동 설정",
+                        tint = if (preset.boundPackageName != null) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+                IconButton(onClick = onExport) {
+                    Icon(
+                        imageVector = MiuixIcons.Backup,
+                        contentDescription = "개별 내보내기",
+                        tint = accent
+                    )
+                }
+                IconButton(onClick = onRename) {
+                    Icon(
+                        imageVector = MiuixIcons.Edit,
+                        contentDescription = "이름 변경",
+                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = MiuixIcons.Delete,
+                        contentDescription = "프리셋 삭제",
+                        tint = MiuixTheme.colorScheme.error
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TextButton(
+                    text = "설정 불러오기",
+                    onClick = { onApply(false) },
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    text = "불러와 실행",
+                    onClick = { onApply(true) },
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }

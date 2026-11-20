@@ -1,15 +1,27 @@
 package com.xitora.autoclicker.ui.components
 
 import android.graphics.BitmapFactory
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -17,26 +29,36 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,7 +67,16 @@ import com.xitora.autoclicker.model.*
 import com.xitora.autoclicker.service.ScreenDetector
 import com.xitora.autoclicker.ui.theme.AutoClickerMotion
 import com.xitora.autoclicker.ui.theme.LocalIsDarkTheme
+import com.xitora.autoclicker.ui.theme.LocalLiquidGlassEnabled
+import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurBlendMode
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
+import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
+import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Play
@@ -53,6 +84,7 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Stopwatch
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.squircle.squircleBackground
 import top.yukonga.miuix.kmp.squircle.squircleBorder
 import top.yukonga.miuix.kmp.squircle.squircleClip
@@ -91,6 +123,12 @@ fun SquirclePillBadge(
     backgroundColor: Color,
     contentColor: Color,
     modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    textStyle: TextStyle = MiuixTheme.textStyles.footnote1.copy(
+        fontWeight = FontWeight.SemiBold,
+        fontFeatureSettings = "tnum"
+    ),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -110,26 +148,36 @@ fun SquirclePillBadge(
     val finalModifier = if (onClick != null) {
         base.clickable(
             interactionSource = interactionSource,
-            indication = null,
+            indication = LocalIndication.current,
             onClick = onClick
         )
     } else {
         base
     }
     Box(
-        modifier = finalModifier.padding(horizontal = 10.dp, vertical = 6.dp),
+        modifier = finalModifier.padding(contentPadding),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            style = MiuixTheme.textStyles.footnote1.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontFeatureSettings = "tnum"
-            ),
-            color = contentColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (leadingIcon != null) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+            Text(
+                text = text,
+                style = textStyle,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -1400,4 +1448,368 @@ fun ConfirmActionDialog(
             )
         }
     }
+}
+
+@Composable
+fun MiuixTopBarActionDivider(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .padding(horizontal = 2.dp, vertical = 8.dp)
+            .width(1.dp)
+            .height(18.dp)
+            .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.14f))
+    )
+}
+
+@Composable
+fun MiuixFloatingScrollTopBar(
+    title: String,
+    scrollBehavior: ScrollBehavior,
+    modifier: Modifier = Modifier,
+    isScrolledOverride: Boolean? = null,
+    backdrop: LayerBackdrop? = null,
+    maxContentWidth: Dp = Dp.Unspecified,
+    navigationIcon: @Composable () -> Unit = {},
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    val isDark = LocalIsDarkTheme.current
+    val density = LocalDensity.current
+    val surfaceBg = MiuixTheme.colorScheme.surface
+    SideEffect {
+        if (scrollBehavior.state.heightOffsetLimit != 0f) {
+            scrollBehavior.state.heightOffsetLimit = 0f
+        }
+        if (scrollBehavior.state.heightOffset != 0f) {
+            scrollBehavior.state.heightOffset = 0f
+        }
+    }
+    val isScrolled by remember(scrollBehavior, isScrolledOverride) {
+        derivedStateOf {
+            isScrolledOverride ?: (scrollBehavior.state.contentOffset < -12f ||
+                scrollBehavior.state.overlappedFraction > 0.04f)
+        }
+    }
+
+    var hasNav by remember { mutableStateOf(false) }
+    var hasActions by remember { mutableStateOf(false) }
+    var navPillVisible by remember { mutableStateOf(false) }
+    var titlePillVisible by remember { mutableStateOf(false) }
+    var actionsPillVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isScrolled, hasNav, hasActions) {
+        val target = isScrolled
+        val stepDelayMs = 85L
+        if (target) {
+            if (hasNav) {
+                navPillVisible = true
+                delay(stepDelayMs)
+            } else {
+                navPillVisible = false
+            }
+            titlePillVisible = true
+            if (hasActions) {
+                delay(stepDelayMs)
+                actionsPillVisible = true
+            } else {
+                actionsPillVisible = false
+            }
+        } else {
+            if (hasActions) {
+                actionsPillVisible = false
+                delay(stepDelayMs)
+            } else {
+                actionsPillVisible = false
+            }
+            titlePillVisible = false
+            if (hasNav) {
+                delay(stepDelayMs)
+                navPillVisible = false
+            } else {
+                navPillVisible = false
+            }
+        }
+    }
+
+    val islandSpring = spring<Float>(
+        dampingRatio = 0.74f,
+        stiffness = 175f
+    )
+    val navProgress by animateFloatAsState(
+        targetValue = if (navPillVisible) 1f else 0f,
+        animationSpec = islandSpring,
+        label = "floating_top_nav_progress"
+    )
+    val titleProgress by animateFloatAsState(
+        targetValue = if (titlePillVisible) 1f else 0f,
+        animationSpec = islandSpring,
+        label = "floating_top_title_progress"
+    )
+    val actionsProgress by animateFloatAsState(
+        targetValue = if (actionsPillVisible) 1f else 0f,
+        animationSpec = islandSpring,
+        label = "floating_top_actions_progress"
+    )
+    val slideOffsetPx = with(density) { 48.dp.toPx() }
+    val useShader = isRuntimeShaderSupported()
+    val edgeOverlayColor = surfaceBg.copy(alpha = if (useShader) 0.48f else 0.90f)
+    val topEdgeBlurMod = if (backdrop != null && useShader) {
+        Modifier.progressiveTextureBlur(
+            backdrop = backdrop,
+            shape = RectangleShape,
+            blurRadius = 6f,
+            gradient = ProgressiveBlur.Top,
+            colors = BlurDefaults.blurColors(
+                blendColors = listOf(BlendColorEntry(edgeOverlayColor, BlurBlendMode.SrcOver))
+            )
+        )
+    } else {
+        Modifier.background(
+            Brush.verticalGradient(
+                0.0f to surfaceBg.copy(alpha = 0.94f),
+                0.62f to surfaceBg.copy(alpha = 0.56f),
+                1.0f to Color.Transparent
+            )
+        )
+    }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .then(topEdgeBlurMod)
+        )
+
+        Row(
+            modifier = Modifier
+                .then(if (maxContentWidth != Dp.Unspecified) Modifier.widthIn(max = maxContentWidth) else Modifier)
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(60.dp)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FloatingTopBarIsland(
+                    progress = navProgress,
+                    isDark = isDark,
+                    backdrop = backdrop,
+                    cornerRadius = 16.dp,
+                    slideOffsetPx = slideOffsetPx,
+                    onHasContentChange = { hasNav = it },
+                    content = navigationIcon
+                )
+                FloatingTopBarIsland(
+                    progress = titleProgress,
+                    isDark = isDark,
+                    backdrop = backdrop,
+                    cornerRadius = 16.dp,
+                    slideOffsetPx = slideOffsetPx,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    AnimatedContent(
+                        targetState = title,
+                        transitionSpec = {
+                            (slideInVertically(animationSpec = AutoClickerMotion.OffsetSpring) { it / 6 } +
+                                fadeIn(tween(280)))
+                                .togetherWith(
+                                    slideOutVertically(animationSpec = AutoClickerMotion.ExitOffsetSpring) { -it / 6 } +
+                                        fadeOut(tween(190))
+                                )
+                        },
+                        label = "top_bar_title_fade"
+                    ) { animTitle ->
+                        Text(
+                            text = animTitle,
+                            style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
+                            color = MiuixTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            FloatingTopBarIsland(
+                progress = actionsProgress,
+                isDark = isDark,
+                backdrop = backdrop,
+                cornerRadius = 16.dp,
+                slideOffsetPx = slideOffsetPx,
+                onHasContentChange = { hasActions = it }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = actions
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingTopBarIsland(
+    progress: Float,
+    isDark: Boolean,
+    backdrop: LayerBackdrop?,
+    cornerRadius: Dp,
+    slideOffsetPx: Float,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    onHasContentChange: (Boolean) -> Unit = {},
+    content: @Composable () -> Unit
+) {
+    val p = progress.coerceIn(0f, 1f)
+    val density = LocalDensity.current
+    val isLiquidGlass = LocalLiquidGlassEnabled.current
+    val minSizePx = with(density) { 48.dp.roundToPx() }
+    val pillShape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
+    val pillFill = if (isDark) {
+        MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
+    } else {
+        Color.White.copy(alpha = 0.94f)
+    }
+    val pillBorder = MiuixTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.08f)
+    val useRealLiquidGlass = isLiquidGlass &&
+        backdrop != null &&
+        isRuntimeShaderSupported() &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+    Layout(
+        modifier = modifier.onSizeChanged { size ->
+            onHasContentChange(size.width > 0 && size.height > 0)
+        },
+        content = {
+            Box(
+                modifier = Modifier
+                    .clip(pillShape)
+                    .padding(contentPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                content()
+            }
+            if (p > 0.005f) {
+                val bgSurfaceMod = if (useRealLiquidGlass) {
+                    Modifier.liquidGlassSurface(
+                        backdrop = backdrop,
+                        shape = pillShape,
+                        cornerRadius = cornerRadius,
+                        blurRadius = 2.5.dp,
+                        refractionHeight = 8.dp,
+                        refractionAmount = 5.dp,
+                        chromaticAberration = 2.0.dp,
+                        surfaceTint = if (isDark) {
+                            Color(0xFF141822).copy(alpha = 0.40f)
+                        } else {
+                            Color(0xFFF6F7FB).copy(alpha = 0.46f)
+                        },
+                        grainAlpha = 0.06f,
+                        fallbackColor = if (isDark) MiuixTheme.colorScheme.surfaceContainerHigh else Color.White
+                    )
+                } else {
+                    val blurMod = if (backdrop != null && isRuntimeShaderSupported()) {
+                        Modifier.textureBlur(
+                            backdrop = backdrop,
+                            shape = pillShape,
+                            blurRadius = 10f,
+                            colors = BlurDefaults.blurColors(
+                                blendColors = listOf(BlendColorEntry(pillFill, BlurBlendMode.SrcOver))
+                            )
+                        )
+                    } else {
+                        Modifier
+                    }
+                    Modifier
+                        .clip(pillShape)
+                        .then(blurMod)
+                        .background(pillFill, pillShape)
+                        .border(1.dp, pillBorder, pillShape)
+                }
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            translationY = (1f - p) * -slideOffsetPx
+                            alpha = p
+                            val scale = 0.92f + 0.08f * p
+                            scaleX = scale
+                            scaleY = scale
+                        }
+                        .shadow(
+                            elevation = (8f * p).dp,
+                            shape = pillShape,
+                            ambientColor = Color.Black.copy(alpha = if (isDark) 0.40f else 0.12f),
+                            spotColor = Color.Black.copy(alpha = if (isDark) 0.40f else 0.14f)
+                        )
+                        .then(bgSurfaceMod)
+                        .pointerInput(Unit) {
+                            detectTapGestures { }
+                        }
+                )
+            }
+        }
+    ) { measurables, constraints ->
+        val contentPlaceable = measurables[0].measure(constraints.copy(minWidth = 0, minHeight = 0))
+        if (contentPlaceable.width == 0 || contentPlaceable.height == 0) {
+            return@Layout layout(0, 0) {}
+        }
+        val pillW = contentPlaceable.width.coerceAtLeast(minSizePx).coerceAtMost(constraints.maxWidth)
+        val pillH = contentPlaceable.height.coerceAtLeast(minSizePx).coerceAtMost(constraints.maxHeight)
+        val bgPlaceable = if (measurables.size > 1) {
+            measurables[1].measure(Constraints.fixed(pillW, pillH))
+        } else {
+            null
+        }
+        layout(pillW, pillH) {
+            bgPlaceable?.placeRelative(0, 0)
+            contentPlaceable.placeRelative(
+                (pillW - contentPlaceable.width) / 2,
+                (pillH - contentPlaceable.height) / 2
+            )
+        }
+    }
+}
+
+@Composable
+fun MiuixBottomEdgeBlur(
+    backdrop: LayerBackdrop,
+    modifier: Modifier = Modifier,
+    extraHeight: Dp = 52.dp
+) {
+    val surfaceBg = MiuixTheme.colorScheme.surface
+    val useShader = isRuntimeShaderSupported()
+    val edgeOverlayColor = surfaceBg.copy(alpha = if (useShader) 0.48f else 0.90f)
+    val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val blurMod = if (useShader) {
+        Modifier.progressiveTextureBlur(
+            backdrop = backdrop,
+            shape = RectangleShape,
+            blurRadius = 6f,
+            gradient = ProgressiveBlur.Bottom,
+            colors = BlurDefaults.blurColors(
+                blendColors = listOf(BlendColorEntry(edgeOverlayColor, BlurBlendMode.SrcOver))
+            )
+        )
+    } else {
+        Modifier.background(
+            Brush.verticalGradient(
+                0.0f to Color.Transparent,
+                0.38f to surfaceBg.copy(alpha = 0.56f),
+                1.0f to surfaceBg.copy(alpha = 0.94f)
+            )
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(navBottomInset + extraHeight)
+            .then(blurMod)
+    )
 }

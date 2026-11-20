@@ -1,10 +1,12 @@
 package com.xitora.autoclicker.ui.components
 
+import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -44,14 +46,16 @@ import androidx.compose.ui.zIndex
 import com.xitora.autoclicker.ui.theme.LocalAppBackdrop
 import com.xitora.autoclicker.ui.theme.LocalIsDarkTheme
 import com.xitora.autoclicker.ui.theme.LocalLiquidGlassEnabled
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Ok
+import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.squircle.squircleBackground
-import top.yukonga.miuix.kmp.squircle.squircleBorder
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.abs
@@ -75,6 +79,7 @@ class StackedToastState {
     fun show(message: String, durationMs: Long = 3400L) {
         val trimmed = message.trim()
         if (trimmed.isEmpty()) return
+        entries.removeAll { it.isExiting }
         val id = ++nextId
         entries.add(0, ToastEntry(id = id, message = trimmed, durationMs = durationMs))
         if (entries.size > 5) {
@@ -93,8 +98,7 @@ class StackedToastState {
         var step = 0
         for (i in entries.indices) {
             val e = entries[i]
-            if (e.id == skipId) continue
-            if (!e.isExiting) {
+            if (e.id != skipId && !e.isExiting) {
                 entries[i] = e.copy(
                     isExiting = true,
                     exitDelayMs = step * staggerMs
@@ -107,6 +111,10 @@ class StackedToastState {
     fun dismiss(id: Long) {
         entries.removeAll { it.id == id }
     }
+
+    fun dismissAll() {
+        entries.clear()
+    }
 }
 
 @Composable
@@ -115,7 +123,9 @@ fun rememberStackedToastState(): StackedToastState = remember { StackedToastStat
 @Composable
 fun StackedToastHost(
     state: StackedToastState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backdrop: LayerBackdrop? = LocalAppBackdrop.current,
+    isLiquidGlass: Boolean = LocalLiquidGlassEnabled.current
 ) {
     val entries = state.entries
     if (entries.isEmpty()) return
@@ -144,22 +154,22 @@ fun StackedToastHost(
                 val animatedScale by animateFloatAsState(
                     targetValue = targetScale,
                     animationSpec = spring(
-                        dampingRatio = 0.74f,
-                        stiffness = 195f
+                        dampingRatio = 0.72f,
+                        stiffness = 190f
                     ),
                     label = "toastDeckScale"
                 )
                 val animatedOffsetY by animateDpAsState(
                     targetValue = targetOffsetY,
                     animationSpec = spring(
-                        dampingRatio = 0.74f,
-                        stiffness = 195f
+                        dampingRatio = 0.72f,
+                        stiffness = 190f
                     ),
                     label = "toastDeckOffsetY"
                 )
                 val animatedAlpha by animateFloatAsState(
                     targetValue = targetAlpha,
-                    animationSpec = tween(durationMillis = 220),
+                    animationSpec = tween(durationMillis = 280),
                     label = "toastDeckAlpha"
                 )
 
@@ -169,6 +179,8 @@ fun StackedToastHost(
                     isExiting = item.isExiting,
                     exitDelayMs = item.exitDelayMs,
                     deckAlpha = animatedAlpha,
+                    backdrop = backdrop,
+                    isLiquidGlass = isLiquidGlass,
                     onSwipeStartDismissStack = {
                         state.requestDismissAllCascade(staggerMs = 45L, skipId = item.id)
                     },
@@ -193,32 +205,30 @@ private fun SwipeableToastCard(
     isExiting: Boolean,
     exitDelayMs: Long,
     deckAlpha: Float,
+    backdrop: LayerBackdrop?,
+    isLiquidGlass: Boolean,
     onSwipeStartDismissStack: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isDark = LocalIsDarkTheme.current
-    val backdrop = LocalAppBackdrop.current
-    val liquidGlassEnabled = LocalLiquidGlassEnabled.current
     val scope = rememberCoroutineScope()
     val dragX = remember { Animatable(0f) }
-    val fadeAnim = remember { Animatable(0f) }
     val exitShiftY = remember { Animatable(0f) }
+    val fadeAnim = remember { Animatable(0f) }
     var cardWidthPx by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
-        fadeAnim.animateTo(1f, animationSpec = tween(durationMillis = 240))
+        fadeAnim.animateTo(1f, animationSpec = tween(durationMillis = 220))
     }
 
     LaunchedEffect(isExiting) {
         if (isExiting) {
-            if (exitDelayMs > 0L) {
-                delay(exitDelayMs)
+            if (exitDelayMs > 0L) delay(exitDelayMs)
+            coroutineScope {
+                launch { fadeAnim.animateTo(0f, animationSpec = tween(durationMillis = 200)) }
+                launch { exitShiftY.animateTo(22f, animationSpec = tween(durationMillis = 200)) }
             }
-            launch {
-                exitShiftY.animateTo(22f, animationSpec = tween(durationMillis = 200))
-            }
-            fadeAnim.animateTo(0f, animationSpec = tween(durationMillis = 200))
             onRemove()
         }
     }
@@ -235,24 +245,34 @@ private fun SwipeableToastCard(
     }
     val borderColor = MiuixTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.14f else 0.09f)
     val corner = 18.dp
-    val surfaceModifier = if (liquidGlassEnabled && backdrop != null) {
+    val shape = RoundedCornerShape(corner)
+    val useRealLiquidGlass = isLiquidGlass &&
+        backdrop != null &&
+        isRuntimeShaderSupported() &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+    val surfaceModifier = if (useRealLiquidGlass) {
         Modifier.liquidGlassSurface(
             backdrop = backdrop,
-            shape = RoundedCornerShape(corner),
+            shape = shape,
+            cornerRadius = corner,
             blurRadius = 2.5.dp,
-            refractionHeight = 8.dp,
-            refractionAmount = 5.dp,
-            chromaticAberration = 1.6.dp,
-            refraction = true,
-            surfaceTint = containerColor.copy(alpha = if (isDark) 0.68f else 0.72f),
+            refractionHeight = 10.dp,
+            refractionAmount = 7.dp,
+            chromaticAberration = 2.4.dp,
+            surfaceTint = if (isDark) {
+                Color(0xFF141822).copy(alpha = if (isFront) 0.44f else 0.34f)
+            } else {
+                Color(0xFFF6F7FB).copy(alpha = if (isFront) 0.48f else 0.38f)
+            },
             grainAlpha = 0.06f,
-            fallbackColor = containerColor.copy(alpha = 0.92f)
+            fallbackColor = containerColor
         )
     } else {
         Modifier
             .squircleClip(corner)
             .squircleBackground(color = containerColor, cornerRadius = corner)
-            .squircleBorder(width = 0.75.dp, color = borderColor, cornerRadius = corner)
+            .border(width = 0.75.dp, color = borderColor, shape = shape)
     }
 
     Row(
@@ -262,7 +282,7 @@ private fun SwipeableToastCard(
             .offset { IntOffset(dragX.value.roundToInt(), exitShiftY.value.roundToInt()) }
             .alpha(combinedAlpha)
             .dropShadow(
-                shape = RoundedCornerShape(corner),
+                shape = shape,
                 shadow = Shadow(
                     radius = if (isFront) 14.dp else 8.dp,
                     color = Color.Black,
@@ -297,7 +317,7 @@ private fun SwipeableToastCard(
                                                 targetValue = 0f,
                                                 animationSpec = spring(
                                                     dampingRatio = 0.72f,
-                                                    stiffness = 200f
+                                                    stiffness = 190f
                                                 )
                                             )
                                         }
@@ -309,7 +329,7 @@ private fun SwipeableToastCard(
                                             targetValue = 0f,
                                             animationSpec = spring(
                                                 dampingRatio = 0.72f,
-                                                stiffness = 200f
+                                                stiffness = 190f
                                             )
                                         )
                                     }
@@ -335,7 +355,7 @@ private fun SwipeableToastCard(
             tint = MiuixTheme.colorScheme.primary,
             modifier = Modifier.size(20.dp)
         )
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(10.dp))
         Text(
             text = message,
             style = MiuixTheme.textStyles.body2,

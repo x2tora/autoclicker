@@ -18,6 +18,7 @@ import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 val LocalIsDarkTheme = compositionLocalOf { false }
 val LocalAppBackdrop = compositionLocalOf<LayerBackdrop?> { null }
 val LocalLiquidGlassEnabled = compositionLocalOf { false }
+val LocalWideDualLayoutEnabled = compositionLocalOf { false }
 
 val AccentPresetPalette: List<Pair<String, Long>> = listOf(
     "블루" to 0xFF3482FF,

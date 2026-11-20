@@ -60,8 +60,8 @@ object AutoClickerMotion {
     )
 
     val OdometerSpring: FiniteAnimationSpec<IntOffset> = spring(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = 190f
+        dampingRatio = 0.74f,
+        stiffness = 200f
     )
 
     fun expandEnter(): EnterTransition =
@@ -78,13 +78,13 @@ object AutoClickerMotion {
 
     fun tabTransition(
         forward: Boolean,
-        slideDivisor: Int = 5
+        slideDivisor: Int = 12
     ): ContentTransform {
         val enterOffset: (Int) -> Int = { width ->
             if (forward) width / slideDivisor else -width / slideDivisor
         }
         val exitOffset: (Int) -> Int = { width ->
-            if (forward) -width / (slideDivisor + 1) else width / (slideDivisor + 1)
+            if (forward) -width / slideDivisor else width / slideDivisor
         }
         return (
             slideInHorizontally(animationSpec = OffsetSpring, initialOffsetX = enterOffset) +
